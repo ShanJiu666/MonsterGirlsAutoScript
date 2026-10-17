@@ -1,0 +1,65 @@
+# ═══════════════════════════════════════════════════════════════════════
+# MGAS PC —— 游戏探索自动刷图工具（PC 端）
+# ═══════════════════════════════════════════════════════════════════════
+# 原则：源码、文档、模板、数据表入仓；**运行期产物**不入仓。
+#
+# ⚠ 本文件里每条规则独占一行，注释另起一行。
+#   gitignore 不支持行尾注释 —— 写成 `runs/  # 说明` 会被当成含 `#` 的
+#   字面模式而永不匹配。
+
+# ── 运行期产物（每跑一局都会生成，体积大且含本机现场）──
+# 截图 / 日志 / 统计摘要。可由你自己跑出来，不必入仓。
+runs/
+hot/
+logs/
+friend_mode.flag
+
+# ── 打包产物（几百 MB，绝不入库）──
+#   由 `python tools/build_release_pkg.py` 生成
+dist/
+*.zip
+
+# 打包时临时挂的 venv（若用过 --keep-venv）
+venv/
+.venv/
+python311/
+
+# 调试/探针留下的零散产物
+# ⚠ `runs/_ocr_tmp.png` 是 mapbot.py 的运行期临时文件（不入库）。
+#   根目录同名的那份是**测试脚本用 cwd 写入的**，也一并忽略；
+#   但**不能**用裸 `_ocr_tmp.png` —— 那会连 `_verify/` 下的语料一起忽略，
+#   导致「已跟踪文件与 .gitignore 冲突」（git add 会直接报错，实测踩过）。
+/_ocr_tmp.png
+runs/_ocr_tmp.png
+_*.log
+_*.out
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+
+# ── 极速截图 sidecar 的独立 venv（约 170MB，不入库）──
+# 装的是 MaaFw + numpy 2.x（与主 venv 的 numpy 1.x 冲突，必须分进程跑）。
+# 缺了它只是**退回 adb 截图**（慢 25 倍），不影响功能。重建见 README。
+_maa_venv/
+maa_log/
+maa_res/
+
+# ── 本机特有（不入仓）──
+# 环境变量样例 / 本机路径覆盖，各人不同
+.env
+local_settings.py
+
+# ── OS ──
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ── 别把识别资源忽略掉（*明确列出来*，防以后误加 `*.png`/`*.json` 规则）──
+#   templates/**            识别模板（必须入仓）
+#   server_datatable.json   游戏数据表（必须入仓）
+#   data/**                 离线素材（按需入仓）
+!templates/
+!server_datatable.json
+!data/

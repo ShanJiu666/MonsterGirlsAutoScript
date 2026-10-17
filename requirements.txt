@@ -1,0 +1,20 @@
+# MGAS PC 端运行依赖
+#
+# ⚠ numpy 必须停在 1.x —— airtest 与之绑定（numpy 2.x 会直接报错）
+# 已在 Windows + Python 3.11 实测通过的版本组合：
+
+airtest==1.4.3
+numpy==1.26.4
+
+# 图像处理
+opencv-python==4.11.0.86
+Pillow==12.3.0
+
+# 端侧 OCR（PP-OCRv4 推理）
+rapidocr-onnxruntime==1.4.4
+
+# 图形界面
+customtkinter==6.0.0
+
+# Windows 进程/窗口操作（探测模拟器进程、截图通道）
+pywin32==312
