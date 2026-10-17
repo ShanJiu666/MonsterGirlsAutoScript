@@ -66,7 +66,8 @@ except Exception:                       # noqa: BLE001
     pass
 
 WORK = tempfile.mkdtemp(prefix='mgas_hot_gate_')
-PKG = os.path.join(WORK, 'pkg')
+PKG = os.path.join(WORK, 'pkg')        # 包根（templates/ data/ PC_VERSION）
+CODE_DIR = os.path.join(PKG, 'core')   # 代码目录（业务 .py 全在这）
 WWW = os.path.join(WORK, 'www')
 MANIFEST = os.path.join(WWW, 'manifest.json')
 PROBE = 'hot_probe_mod.py'                              # 探针模块（仓里没有，只有门禁造）
@@ -91,15 +92,27 @@ def section(t):
 # ───────────────────────── 假包目录 ─────────────────────────
 
 def build_pkg():
-    """拷一份 mapbot_pc 顶层 .py 到临时目录（= 朋友的包），外加探针模块与空目录"""
+    """造一个「朋友的包」——**与真实发布包同构**（2026-10-17 目录整理后）：
+
+        PKG/                 ← 包根（templates/ data/ PC_VERSION 在这层）
+          core/              ← 全部业务 .py（bot_gui / explore_loop / …）
+          hot/               ← 热更现场在 **core/**（与 hotupdate.pkg_dir() 一致）
+
+    ⚠ 以前这里是「拷仓根 .py 到 PKG 根」——目录整理后仓根没有 .py 了，
+      那套等于造了个空包 ⇒ `import explore_loop` 全崩 ✗
+    """
     shutil.rmtree(PKG, ignore_errors=True)
     os.makedirs(PKG)
-    for f in os.listdir(HERE):
-        src = os.path.join(HERE, f)
+    CODE = os.path.join(PKG, 'core')
+    os.makedirs(CODE, exist_ok=True)
+    _srccore = os.path.join(HERE, 'core')
+    for f in os.listdir(_srccore):
+        src = os.path.join(_srccore, f)
         if f.endswith('.py') and os.path.isfile(src):
-            shutil.copy2(src, os.path.join(PKG, f))
-    for sub in ('templates', 'runs', 'models_int8', 'maa_res', 'hot'):
+            shutil.copy2(src, os.path.join(CODE, f))
+    for sub in ('templates', 'runs', 'models_int8', 'maa_res'):
         os.makedirs(os.path.join(PKG, sub), exist_ok=True)
+    os.makedirs(os.path.join(CODE, 'hot'), exist_ok=True)
     # ⚠ 数据表必须带（2026-10-17 目录整理后它搬到了 `data/`）
     #   假包缺配表 ⇒ `spots.py` 在 import 期就 `SystemExit('找不到游戏数据表')`
     #   ⇒ 热更自检 import 失败 ⇒ T3/T4/T14/T16/T17/T18 一连串**假红** ✗
@@ -108,8 +121,8 @@ def build_pkg():
     if os.path.isfile(_dt):
         shutil.copy2(_dt, os.path.join(PKG, 'data', 'server_datatable.json'))
     io.open(os.path.join(PKG, 'PC_VERSION'), 'w', encoding='utf-8').write('1.0\n')
-    io.open(os.path.join(PKG, PROBE), 'w', encoding='utf-8').write("TAG = 'B'\n")   # B = 内置
-    shutil.rmtree(os.path.join(PKG, 'hot'), ignore_errors=True)
+    io.open(os.path.join(CODE, PROBE), 'w', encoding='utf-8').write("TAG = 'B'\n")   # B = 内置
+    shutil.rmtree(os.path.join(CODE_DIR, 'hot'), ignore_errors=True)
 
 
 def probe_tag_in_pkg():
@@ -117,20 +130,35 @@ def probe_tag_in_pkg():
     env = dict(os.environ)
     env['PYTHONIOENCODING'] = 'utf-8'
     r = subprocess.run([sys.executable, '-c', 'import %s as m; print(m.TAG)' % PROBE[:-3]],
-                       cwd=PKG, env=env, capture_output=True, text=True,
+                       cwd=CODE_DIR, env=env, capture_output=True, text=True,
                        encoding='utf-8', errors='replace', timeout=120)
     return ((r.stdout or '') + (r.stderr or '')).strip()
 
 
+def _dst(rel):
+    """补丁/探针条目 → 假包内的绝对路径（**与 hotupdate._dst_of 同规则**）
+
+    · `xxx.py`（根级 .py）        → PKG/core/xxx.py
+    · `core/xxx.py`               → PKG/core/xxx.py
+    · `templates/…` `data/…` 等    → PKG/…
+    """
+    parts = rel.replace('\\', '/').split('/')
+    if parts[0] == 'core':
+        return os.path.join(PKG, *parts)
+    if len(parts) == 1 and parts[0].endswith('.py'):
+        return os.path.join(CODE_DIR, parts[0])
+    return os.path.join(PKG, *parts)
+
+
 def read_pkg(rel):
-    p = os.path.join(PKG, *rel.split('/'))
+    p = _dst(rel)
     if not os.path.isfile(p):
         return None
     return io.open(p, encoding='utf-8', errors='replace').read()
 
 
 def clear_state():
-    shutil.rmtree(os.path.join(PKG, 'hot'), ignore_errors=True)
+    shutil.rmtree(os.path.join(CODE_DIR, 'hot'), ignore_errors=True)
 
 
 # ───────────────────────── 更新源（本地 http）─────────────────────────
@@ -172,7 +200,9 @@ def skip(name):
 PORT = srv.server_address[1]
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-os.environ['MGAS_PC_PKG_DIR'] = PKG
+# ⚠ 2026-10-17 目录整理后：**代码在 PKG/core/**
+#   pkg_dir() 语义 = 「装着 bot_gui.py 的目录」⇒ 必须指向 core/（不是包根）
+os.environ['MGAS_PC_PKG_DIR'] = os.path.join(PKG, 'core')
 os.environ['MGAS_PC_MANIFEST_API'] = 'http://127.0.0.1:%d/api/manifest.json' % PORT
 os.environ['MGAS_PC_MANIFEST_RAW'] = 'http://127.0.0.1:%d/manifest.json' % PORT
 os.environ.pop('MAPBOT_FRIEND', None)
@@ -291,7 +321,7 @@ def main():
     check('语法' in detp or 'COMPILE' in detp, 'T6b 原因是语法检查', detp)
     check(read_pkg(PROBE).strip() == "TAG = 'B'", 'T6c 目标文件**没被改动**（覆盖前就拦下）',
           read_pkg(PROBE))
-    check(not os.path.isfile(os.path.join(PKG, 'broken_syntax.py')), 'T6d 坏文件没落地')
+    check(not os.path.isfile(_dst('broken_syntax.py')), 'T6d 坏文件没落地')
     check(state().get('rolledBack') == 'hot-pc-1.0-syntax01', 'T6e 该 id 已拉黑', state())
 
     # T7 坏包·import 错（覆盖后自检失败 ⇒ 自动恢复）
@@ -303,7 +333,7 @@ def main():
     okp, detp = HU.apply_pending()
     check(okp is False, 'T7a apply_pending 判失败', detp)
     check(read_pkg(PROBE).strip() == "TAG = 'B'", 'T7b 目标文件已**恢复出厂版**', read_pkg(PROBE))
-    check(not os.path.isfile(os.path.join(PKG, 'probe_boom.py')), 'T7c 新增的坏文件被删掉')
+    check(not os.path.isfile(_dst('probe_boom.py')), 'T7c 新增的坏文件被删掉')
     check(state().get('rolledBack') == 'hot-pc-1.0-import01', 'T7d 该 id 已拉黑', state())
     check(os.path.isdir(HU.bad_dir()) and os.listdir(HU.bad_dir()),
           'T7e 坏包留在 hot/bad/ 取证（不删）')
@@ -335,7 +365,7 @@ def main():
     # 模拟"已经正常覆盖过一次"（含出厂版备份），只是没跑到确认点
     os.makedirs(HU.orig_dir(), exist_ok=True)
     io.open(os.path.join(HU.orig_dir(), PROBE), 'w', encoding='utf-8').write("TAG = 'B'\n")
-    io.open(os.path.join(PKG, PROBE), 'w', encoding='utf-8').write("TAG = 'H'\n")   # 假装已覆盖
+    io.open(os.path.join(CODE_DIR, PROBE), 'w', encoding='utf-8').write("TAG = 'H'\n")   # 假装已覆盖
     HU.save_state({'applied': 'hot-pc-1.0-hang0001', 'confirmed': False,
                    'appliedMeta': {'files': [PROBE]}, 'bootAttempts': 0})
     HU.boot_recover()
@@ -422,9 +452,9 @@ def main():
     publish({'brand_new_mod.py': 'V = 1\n', PROBE: "TAG = 'H'\n"}, 'hot-pc-1.0-newfile1')
     HU.auto_update()
     okp, _ = HU.apply_pending()
-    check(okp and os.path.isfile(os.path.join(PKG, 'brand_new_mod.py')), 'T14a 新文件已落地')
+    check(okp and os.path.isfile(_dst('brand_new_mod.py')), 'T14a 新文件已落地')
     HU.rollback('门禁用例')
-    check(not os.path.isfile(os.path.join(PKG, 'brand_new_mod.py')), 'T14b 回滚后新文件被删')
+    check(not os.path.isfile(_dst('brand_new_mod.py')), 'T14b 回滚后新文件被删')
     check(read_pkg(PROBE).strip() == "TAG = 'B'", 'T14c 探针回到出厂版')
 
     # T15 端到端：真实发版脚本的补丁
@@ -463,7 +493,7 @@ def main():
             env.pop('MAPBOT_FRIEND', None)
         else:
             env['MAPBOT_FRIEND'] = friend
-        r = subprocess.run([sys.executable, '-c', code], cwd=PKG, env=env,
+        r = subprocess.run([sys.executable, '-c', code], cwd=CODE_DIR, env=env,
                            capture_output=True, text=True, encoding='utf-8',
                            errors='replace', timeout=180)
         return ((r.stdout or '') + (r.stderr or '')).strip()
@@ -481,8 +511,8 @@ def main():
           'T16b 开发版：默认存图 + 开精确规划', out_d)
     check('SAVE_FIRST=True OPT_SOLVER=True' in out_n,
           'T16c 不设环境变量 ⇒ 默认开发版（开发机行为不变）', out_n)
-    gui_src = io.open(os.path.join(HERE, 'bot_gui.py'), encoding='utf-8').read()
-    loop_src = io.open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    gui_src = io.open(os.path.join(HERE, 'core', 'bot_gui.py'), encoding='utf-8').read()
+    loop_src = io.open(os.path.join(HERE, 'core', 'explore_loop.py'), encoding='utf-8').read()
     check(gui_src.count('if not FRIEND:') >= 1,
           'T16d bot_gui 里朋友版分支还在（存图勾选框被 `if not FRIEND:` 包住）'
           ' ⚠ 2026-10-11 按新事实改写：本项原来要求 ≥2 处，指的是「存图 + 精确规划」两个勾选框；'
@@ -501,13 +531,13 @@ def main():
         env = dict(os.environ)
         env['PYTHONIOENCODING'] = 'utf-8'
         env['MGAS_PC_NO_POPUP'] = '1'       # ⚠ 否则 messagebox 会等人点击，把门禁卡死
-        r = subprocess.run([sys.executable, os.path.join(PKG, 'bootstrap.py')],
-                           cwd=PKG, env=env, capture_output=True, text=True,
+        r = subprocess.run([sys.executable, os.path.join(CODE_DIR, 'bootstrap.py')],
+                           cwd=CODE_DIR, env=env, capture_output=True, text=True,
                            encoding='utf-8', errors='replace', timeout=300)
         return r.returncode, ((r.stdout or '') + (r.stderr or ''))
 
     def fake_gui(code):
-        io.open(os.path.join(PKG, 'bot_gui.py'), 'w', encoding='utf-8').write(code)
+        io.open(os.path.join(CODE_DIR, 'bot_gui.py'), 'w', encoding='utf-8').write(code)
 
     build_pkg()
     publish({PROBE: "TAG = 'H'\n"}, 'hot-pc-1.0-boot0001')

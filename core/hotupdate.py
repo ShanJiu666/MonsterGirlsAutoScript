@@ -153,8 +153,57 @@ print('OK')
 # ───────────────────────── 路径（**全部函数化**：门禁靠 MGAS_PC_PKG_DIR 指到临时副本）─────
 
 def pkg_dir():
-    """被热更的包目录（= 装着 bot_gui.py / explore_loop.py 的那个目录）"""
+    """**代码目录**（= 装着 bot_gui.py / explore_loop.py 的那个目录）
+
+    ⚠ 2026-10-17 目录整理后：代码在 `core/`，而 `templates/` `data/` 在**包根**
+      ⇒ 补丁落地不能一律用本函数，见 `pkg_root()` / `_dst_of()`。
+    """
     return os.path.abspath(os.environ.get('MGAS_PC_PKG_DIR') or HERE)
+
+
+def pkg_root():
+    """**包根**（= 代码目录的上一级；`templates/` `data/` `runs/` 都在这层）
+
+    ⚠ 兼容旧布局：若 `pkg_dir()` 里就有 `templates/`（没分 core/ 的老包），
+      则包根 == 代码目录。这样**老包照旧能热更** ✓
+    """
+    pkg = pkg_dir()
+    # 老布局：templates/ 与代码同级 ⇒ 包根就是它
+    if os.path.isdir(os.path.join(pkg, 'templates')):
+        return pkg
+    parent = os.path.dirname(pkg)
+    if os.path.isdir(os.path.join(parent, 'templates')):
+        return parent
+    return pkg          # 都没有 ⇒ 退回代码目录（不会更差）
+
+
+#: 补丁里「落在**代码目录**」的首段（其余一律落包根）
+#:  ⚠ 只放**业务 .py 的名字**；别把 templates/data 写进来
+_TOP_LEVEL_CODE = frozenset((
+    'bootstrap.py', 'hotupdate.py',          # 引导层（其实会被 _pkg_rel_ok 拦掉）
+))
+
+
+def _dst_of(rel):
+    """补丁条目 `rel`（包内相对路径）→ **磁盘绝对路径**（按首段选基准目录）
+
+    规则：
+      · `xxx.py`（根级 .py）            → `pkg_dir()/xxx.py`      （代码，在 core/）
+      · `core/xxx.py`                   → `pkg_root()/core/xxx.py`（显式带 core/ 前缀）
+      · `templates/…` `data/…` `docs/…` → `pkg_root()/…`           （资产，在包根）
+      · 其它（`runs/` 等）              → `pkg_root()/…`
+    """
+    norm = _norm_rel(rel)
+    parts = norm.split('/')
+    head = parts[0]
+    # 显式带 core/ 前缀 ⇒ 相对包根解析
+    if head == 'core':
+        return os.path.join(pkg_root(), *parts)
+    # 根级 .py ⇒ 代码目录
+    if len(parts) == 1 and head.endswith('.py'):
+        return os.path.join(pkg_dir(), head)
+    # 其余（templates/ data/ docs/ runs/ …）⇒ 包根
+    return os.path.join(pkg_root(), *parts)
 
 
 def hot_dir():
@@ -421,7 +470,7 @@ def restore_orig(st=None):
         if not _pkg_rel_ok(rel):
             continue
         src = os.path.join(root, *rel.split('/'))
-        dst = os.path.join(pkg, *rel.split('/'))
+        dst = _dst_of(rel)     # ⚠ 按首段选基准（代码 core/ / 资产包根）
         try:
             if os.path.isfile(src):
                 _copy(src, dst)
@@ -481,7 +530,7 @@ def apply_pending():
         _backup_orig(files)
         for rel in files:
             src = os.path.join(pend, *rel.split('/'))
-            dst = os.path.join(pkg_dir(), *rel.split('/'))
+            dst = _dst_of(rel)     # ⚠ 按首段选基准（同覆盖路径）
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             tmp = dst + '.hotnew'
             shutil.copy2(src, tmp)
@@ -545,7 +594,7 @@ def _backup_orig(files):
     root = orig_dir()
     pkg = pkg_dir()
     for rel in files:
-        src = os.path.join(pkg, *rel.split('/'))
+        src = _dst_of(rel)     # ⚠ 按首段选基准（代码 core/ / 资产包根）
         dst = os.path.join(root, *rel.split('/'))
         try:
             if os.path.isfile(src) and not os.path.isfile(dst):
