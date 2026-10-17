@@ -1,0 +1,49 @@
+{
+ "panel_rendering_wait": [
+  {
+   "i": 43,
+   "cell": "4,1",
+   "dim": 0.416,
+   "wait": 1
+  },
+  {
+   "i": 263,
+   "cell": "3,1",
+   "dim": 0.413,
+   "wait": 1
+  }
+ ],
+ "purple_tap": {
+  "i": 262,
+  "round": 2,
+  "tap": [
+   "3,1",
+   4.0,
+   true,
+   "S00003_221",
+   5
+  ],
+  "sid_board": [
+   "221",
+   "游乐设施",
+   0.482,
+   1.091
+  ],
+  "panel_via": "title",
+  "explore_clicks": 3,
+  "order_cost": {
+   "3,1": [
+    5,
+    "S00003_221"
+   ]
+  }
+ },
+ "vault_acts": [
+  "buy1",
+  "claim1",
+  "buy2",
+  "claim2",
+  "buy3",
+  "claim3_fb"
+ ]
+}

@@ -1,0 +1,70 @@
+{
+ "_note": "真机切片：runs/acc2/loop/loop_log.json 第 1 张图（2026-10-05 13:27）——把 targets_unreachable 误报成认不出棋盘的那一把，见 verify_newequip.py",
+ "unreachable": [
+  {
+   "solver": "ok",
+   "cost": 4,
+   "steps": 1,
+   "steps_raw": 1,
+   "targets": 1,
+   "order": [
+    "2,7"
+   ],
+   "secs": 0.01
+  },
+  {
+   "plan": "give_up_step",
+   "cell": "2,7",
+   "nochange": 1,
+   "cold": 1,
+   "note": "试过一次就摘（不拉黑、下张图重排 ✓）"
+  },
+  {
+   "round": 1,
+   "stamina": 2421,
+   "ocr": "skip_no_panel",
+   "slots_free": 1,
+   "marks": {
+    "2,7": [
+     "boss",
+     "recommend"
+    ]
+   },
+   "order": {
+    "none": 18,
+    "gray": 2,
+    "marked": 1,
+    "fogged": 1,
+    "force": true,
+    "content(unused)": 7,
+    "buy": 0,
+    "buy_hidden": 0
+   },
+   "road": [
+    [
+     168,
+     1004
+    ],
+    [
+     264,
+     908
+    ],
+    [
+     360,
+     908
+    ],
+    [
+     456,
+     908
+    ],
+    [
+     552,
+     812
+    ]
+   ]
+  },
+  {
+   "finish": "targets_unreachable"
+  }
+ ]
+}
