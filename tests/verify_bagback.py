@@ -56,7 +56,7 @@ os.chdir(ROOT)
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 FAILS = []
-EL = os.path.join(HERE, 'explore_loop.py')
+EL = os.path.join(CORE, 'explore_loop.py')
 
 
 def ck(name, cond, detail=''):

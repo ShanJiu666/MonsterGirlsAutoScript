@@ -300,7 +300,7 @@ def main():
     print()
     print('【1d】战斗结算标题模板 battle_win_title（正样本必须命中 / 地图横幅帧必须不命中）')
     import re as _re
-    _elsrc = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    _elsrc = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     _mb = _re.search(r'^_BATTLE_TITLE_BOX\s*=\s*\(([^)]*)\)', _elsrc, _re.M)
     _mt = _re.search(r'^_BATTLE_TMPL_THR\s*=\s*([\d.]+)', _elsrc, _re.M)
     _has_tpl = os.path.exists(os.path.join(F.TPL_DIR, 'battle_win_title.png'))

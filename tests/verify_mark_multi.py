@@ -117,7 +117,7 @@ def main():
     print('       720(cx= 96) ⇒ %s' % ([s720[0], s720[-1]],))
     ck('144 的尺度区间 ≈ 3.8~5.2', abs(s1080[0] - 3.8) < 0.15 and abs(s1080[-1] - 5.2) < 0.15)
     ck('96 的尺度区间 ≈ 2.53~3.47', abs(s720[0] - 2.53) < 0.15 and abs(s720[-1] - 3.47) < 0.15)
-    src = open(os.path.join(HERE, 'marks.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'marks.py'), encoding='utf-8').read()
     lines = src.splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def scan_board(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]

@@ -72,7 +72,7 @@ def main():
     # ── ① 三条口径都在源码里 ────────────────────────────────────────
     print()
     print('【1】三条口径都落地')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     lines = src.splitlines()
     ck('① 有 `recommend_blocked_low_clover`（拉黑日志）',
        'recommend_blocked_low_clover' in src)

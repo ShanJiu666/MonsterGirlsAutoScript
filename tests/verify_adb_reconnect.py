@@ -234,13 +234,13 @@ def main():
     # ── 5. 调用点必须用 enter_with_retry（防止有人改回去）───────────────
     print()
     print('【5】`run_maps` 的进图调用点用的是 `enter_with_retry`（防回退）')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     ck('源码里有 `_entered = enter_with_retry(` 这条调用',
        'enter_with_retry(b, log, tag=' in src)
     ck('没有残留"直接裸调 ensure_in_map 进图"的写法',
        '_entered = ensure_in_map(' not in src)
     # mapbot 里不许再有写死 5037 的设备 URI
-    msrc = open(os.path.join(HERE, 'mapbot.py'), encoding='utf-8').read()
+    msrc = open(os.path.join(CORE, 'mapbot.py'), encoding='utf-8').read()
     ck('`mapbot.py` 里没有 `Android://127.0.0.1:5037` 这种写死端口的 URI',
        'Android://127.0.0.1:5037' not in msrc)
     ck('`mapbot.py` 里有 `ADB_PORT` 且被 `_dev_uri` 用上',

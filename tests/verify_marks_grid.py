@@ -110,7 +110,7 @@ def main():
     try:
         import re as _re
         bad_assign = []
-        for _ln in io.open(os.path.join(HERE, 'explore_loop.py'),
+        for _ln in io.open(os.path.join(CORE, 'explore_loop.py'),
                            encoding='utf-8').read().splitlines():
             if _ln.lstrip().startswith('#'):       # 注释里提到旧写法不算 ✗
                 continue
@@ -261,7 +261,7 @@ def main():
         #     ⇒ 门禁跟着改，**否则门禁会一直把代码拽回旧行为**（这才是真危险）。
         #   现状：没有标记格 + 没有商人/宝库 ⇒ 直接 `return 'done'` 收工。
         try:
-            src2 = io.open(os.path.join(HERE, 'explore_loop.py'),
+            src2 = io.open(os.path.join(CORE, 'explore_loop.py'),
                            encoding='utf-8').read()
             check('⑪ 退图判据 = 「没标记格 且 没商人/宝库」就收工'
                   '（用户口径：目标没了就退，不强求揭开雾格）',

@@ -96,7 +96,7 @@ def main():
     #     并把**多格宽度**一并覆盖（单格 dw=30 只是最小 case）。
     _B = SP.Board('S00003', grid={'x0': 24.0, 'y0': 668.0, 'cx': 96.0, 'cy': 96.0})
     import re as _re
-    _src = io.open(os.path.join(HERE, 'spots.py'), encoding='utf-8').read()
+    _src = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8').read()
     _i = _src.index('    def _region(')
     _body = _src[_i:_src.index('\n    def ', _i + 10)]
     # ⚠⚠ **只取代码行，跳过文档字符串** —— 那一大段注释里也写着
@@ -182,7 +182,7 @@ def main():
     print()
     print('【4】源码里 _region 确实用 px 公式（防注释在、代码没了）')
     try:
-        src = io.open(os.path.join(HERE, 'spots.py'), encoding='utf-8').read()
+        src = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8').read()
     except OSError as e:                          # noqa: BLE001
         check('读得到 spots.py', False, repr(e))
         src = ''

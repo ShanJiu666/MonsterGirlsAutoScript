@@ -158,7 +158,7 @@ def main():
     print()
     print('【5】源码里那两处修法确实在（防注释在、代码没了）')
     try:
-        src = io.open(os.path.join(HERE, 'explore_loop.py'),
+        src = io.open(os.path.join(CORE, 'explore_loop.py'),
                       encoding='utf-8').read()
     except OSError as e:                              # noqa: BLE001
         check('读得到 explore_loop.py', False, repr(e))

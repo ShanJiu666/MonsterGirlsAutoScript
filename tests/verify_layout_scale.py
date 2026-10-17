@@ -71,7 +71,7 @@ def main():
     print('=== 分辨率缩放自检（不碰真机）===\n')
 
     print('【1】ADAPTIVE_LAYOUT 必须开着（否则 k 恒 1.0，720p 全废）')
-    src = io.open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     import re
     m = re.search(r'^ADAPTIVE_LAYOUT\s*=\s*(True|False)', src, re.M)
     ck('能找到 ADAPTIVE_LAYOUT 开关', bool(m))
@@ -149,7 +149,7 @@ def main():
     # 换基准只改 layout.REF 是不够的 —— `LAYOUT.sy(1400)` 这类**调用参数**
     # 也要一起 ×0.6667，否则 k=1.0 下门槛反而更高、按钮更点不到。
     # 这条断言就是防"只换一半"。
-    lines = io.open(os.path.join(HERE, 'explore_loop.py'),
+    lines = io.open(os.path.join(CORE, 'explore_loop.py'),
                     encoding='utf-8').read().splitlines()
     pat = re.compile(r'LAYOUT\.(sy|sx)\(([^()]*)\)')
     over = []

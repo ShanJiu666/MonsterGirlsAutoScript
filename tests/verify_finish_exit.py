@@ -93,7 +93,7 @@ def main():
     print()
     print('【1】finish_map 里不得引用不存在的局部变量 img（NameError ⇒ 必崩）')
     try:
-        src = io.open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+        src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     except OSError as e:                                # noqa: BLE001
         check('读得到 explore_loop.py', False, repr(e))
         return 1

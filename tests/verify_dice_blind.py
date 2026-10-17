@@ -95,7 +95,7 @@ def main():
     # ── ② 两个棋盘内的点都必须被判据包着 ─────────────────────────────
     print()
     print('【2】源码：两个棋盘内的点都被"棋盘压暗"判据包着')
-    lines = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read().splitlines()
+    lines = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read().splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def handle_dice(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]
     code = '\n'.join(l for l in lines[s:e] if not l.lstrip().startswith('#'))

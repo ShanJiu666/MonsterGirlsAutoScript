@@ -64,7 +64,7 @@ import explore_loop as EL                   # noqa: E402
 
 
 FAILS = []
-SRC = io.open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+SRC = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 FIX = os.path.join(HERE, '_verify', 'loopend_acc2_20261005.json')
 VER = os.path.join(HERE, '_verify')
 

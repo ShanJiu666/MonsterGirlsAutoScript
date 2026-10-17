@@ -73,7 +73,7 @@ def main():
         got = EL._is_purple_cell(sid, ev, tap)
         ck('%-56s ⇒ %s' % (name, want), got is want, '实际 %s' % got)
     # 纯函数存在性（防有人把判据写回内联、门禁又变成测不到 ✗）
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     ck('判据是**可离线测的纯函数** `_is_purple_cell()`，且探索分支在调它',
        'def _is_purple_cell(' in src and '_is_purple = _is_purple_cell(' in src)
     print()

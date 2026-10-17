@@ -84,7 +84,7 @@ def main():
     # ── ② 真帧：判据必须命中 ─────────────────────────────────────────
     print()
     print('【2】判据在**宝库刚打开那一刻的真帧**上必须命中')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     lines = src.splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def one_round(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]

@@ -80,7 +80,7 @@ def main():
        EL._is_purple_cell('S00003_221', ['3,1'], (72, 908)) is True)
     ck('`_is_purple_cell` 是纯函数、探索分支在调它（防写回内联）',
        '_is_purple = _is_purple_cell(' in open(
-           os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read())
+           os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read())
 
     # ── ② 真机日志事实：弹了、但没被接住、然后直接退图 ────────────────
     print()
@@ -121,7 +121,7 @@ def main():
     #   `if not mk:` 按"不在路上/不在计划里"判 ⇒ **面板被关掉：既没探索也没打** ✗
     print()
     print('【3】分支优先级：紫/橙格 + 有空闲槽 ⇒ 必须绕过战斗分支、走探索')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     code_lines = [ln for ln in src.splitlines() if not ln.lstrip().startswith('#')]
     code = '\n'.join(code_lines)
     i_pre = src.index("'purple_prefer_explore'")

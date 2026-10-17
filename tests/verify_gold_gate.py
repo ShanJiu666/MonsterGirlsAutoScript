@@ -128,7 +128,7 @@ def main():
     # ── ④ 三处闸门都要在（缺一处 ⇒ 能被绕过 ✗）──────────────────────
     print()
     print('【4】闸门必须覆盖**四条路径**（缺一就能绕过）')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     lines = src.splitlines()
 
     def body_of(fn):

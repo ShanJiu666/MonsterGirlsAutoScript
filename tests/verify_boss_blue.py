@@ -57,7 +57,7 @@ try:
 except Exception:                                # noqa: BLE001
     pass
 
-SRC_PATH = os.path.join(HERE, 'marks.py')
+SRC_PATH = os.path.join(CORE, 'marks.py')
 SRC = io.open(SRC_PATH, encoding='utf-8').read()
 
 _n = [0]

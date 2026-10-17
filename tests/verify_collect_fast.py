@@ -167,7 +167,7 @@ def _inmap_ocr_band(src):
 
 def main():
     print('=== 退图前补点：固定坐标优先，不是逐个状态 OCR ===')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     lines = src.splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def final_collect(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]

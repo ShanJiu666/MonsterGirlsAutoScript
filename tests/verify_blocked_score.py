@@ -172,7 +172,7 @@ check('BLK_5 score 缺失/是 None ⇒ **不拉黑**（fail-open，宁多点不�
 
 print()
 print('【D】explore_loop 两处调用点都已切到新口径（不许漏改一处）')
-_src = io.open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 check('DRV_1 _blocked_px 走 is_blocked_cell',
       'is_blocked_cell(_v)' in _src)
 check('DRV_2 _cells_for_model 的拉黑标记也走新口径',

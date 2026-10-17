@@ -366,7 +366,7 @@ def main():
         ck('⓪e-3 ⭐ 点完「结束招募」⇒ 回到**招募主页**（认到「招募一次」✓）',
            RC._on_recruit_home(_ih), '认到 %s' % (RC.GC._texts(_ih)[:8],))
     # ⛔ 撤回守门：`_read_result` 必须**不存在**（用户口径「不用读结果」✗）
-    _rsrc = io.open(os.path.join(HERE, 'recruit.py'), encoding='utf-8').read()
+    _rsrc = io.open(os.path.join(CORE, 'recruit.py'), encoding='utf-8').read()
     _code = '\n'.join(l for l in _rsrc.splitlines()
                       if not l.strip().startswith('#'))
     ck('⓪e-4 ⛔ 撤回守门：`_read_result()` **已删**（用户：「不用读结果」✗）',
@@ -429,7 +429,7 @@ def main():
         ck('⓪f-8 ⭐⭐ 守门：第 1 行不是「可领取」⇒ **盲点必须被拒绝**（不瞎点 ✗）',
            bool(_first) and _first['text'] != IT.INTEL_CLAIMABLE,
            '（`claim_weekly` 里那条 `if _t != INTEL_CLAIMABLE: return False` ✓）')
-    _isrc = io.open(os.path.join(HERE, 'intel.py'), encoding='utf-8').read()
+    _isrc = io.open(os.path.join(CORE, 'intel.py'), encoding='utf-8').read()
     _icode = '\n'.join(l for l in _isrc.splitlines()
                        if not l.strip().startswith('#'))
     ck('⓪f-9 ⭐ 每日是**循环领**（`claim_daily` 有 for 循环 + 「没有可领取了」出口）',
@@ -470,7 +470,7 @@ def main():
        _ads_tap_when_three(), '（同夹具只把计数换成 3/3 ⇒ 必须有一次点击 ✓）')
     ck('⓪g-5 ⭐ 领到判据是**剩余变少**（`cnt2[0] < remaining`），不是变多 ✗',
        'cnt2[0] < remaining' in _strip_doc(_adsrc := io.open(
-           os.path.join(HERE, 'ads.py'), encoding='utf-8').read()),
+           os.path.join(CORE, 'ads.py'), encoding='utf-8').read()),
        '（源码里找 `cnt2[0] < remaining` ✓）')
     ck('⓪g-6 ⭐ 领奖后**先点「返回」再读计数**（弹窗会盖住计数 ✗）',
        '_dismiss_reward_popup' in _strip_doc(_adsrc),

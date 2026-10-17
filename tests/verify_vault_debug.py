@@ -59,7 +59,7 @@ def ck(name, cond, detail=''):
 
 def main():
     print('=== 宝库取证：默认不落盘 ===')
-    src = open(os.path.join(HERE, 'buypanels.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'buypanels.py'), encoding='utf-8').read()
     lines = src.splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def _vstep(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]

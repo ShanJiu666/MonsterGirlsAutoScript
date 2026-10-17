@@ -122,13 +122,13 @@ ck('①c 缺失的 8 格**不在** obs_cells 里（否则闸门拦不住）',
 _idx_has = [mapsim.cell_of(int(rc.split(',')[0]), int(rc.split(',')[1])) for rc in B18]
 ck('①d 有观测的格**都在** obs_cells 里', all(i in (_ocs or set()) for i in _idx_has))
 
-_src_ms = io.open(os.path.join(HERE, 'mapsim.py'), encoding='utf-8').read()
+_src_ms = io.open(os.path.join(CORE, 'mapsim.py'), encoding='utf-8').read()
 _Code = '\n'.join(l for l in _src_ms.splitlines() if not l.lstrip().startswith('#'))
 ck('② `_mark_obs_cells` 辅助存在且被调用（不是写了不调用）',
    'def _mark_obs_cells' in _Code and '_mark_obs_cells(' in _Code.replace(
        'def _mark_obs_cells', '', 1))
 
-_src_mv = io.open(os.path.join(HERE, 'mapsolve.py'), encoding='utf-8').read()
+_src_mv = io.open(os.path.join(CORE, 'mapsolve.py'), encoding='utf-8').read()
 _CodeV = '\n'.join(l for l in _src_mv.splitlines() if not l.lstrip().startswith('#'))
 ck('③ `Problem.consumed_cells` 里有 obs_cells 闸门（与 `_build_cache.EMPTY_ADJ` 对称）',
    'obs_cells' in _CodeV and 'if _obs_cells' in _CodeV)

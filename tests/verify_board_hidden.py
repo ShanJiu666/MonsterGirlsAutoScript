@@ -85,7 +85,7 @@ def main():
     ck('阈值 = 8（真机：干净盘 35 格 / 部分揭开 13~26 / 被遮 2 格 ⇒ 落在两簇中间 ✓）',
        int(getattr(EL, 'BOARD_MIN_CELLS', 0)) == 8,
        '实际 %s' % getattr(EL, 'BOARD_MIN_CELLS', None))
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     lines = src.splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def board_hidden(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]

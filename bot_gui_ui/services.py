@@ -869,7 +869,7 @@ class DeviceService:
     def _recruit_now(self, device, tag=''):
         self.emit('log', '')
         self.emit('log', '🎲 **立即招募**（不等收工，现在就做一次免费指定招募）…')
-        cmd = [self.python, os.path.join(self.here, 'recruit.py'),
+        cmd = [self.python, os.path.join(self.here, 'core', 'recruit.py'),
                '--device', device]
         if tag:
             cmd += ['--tag', tag]
@@ -1038,7 +1038,7 @@ class DeviceService:
         """`bot_gui.py --device X --tag accN`（命令行**与重写前逐字一致** ✓）"""
         try:
             os.makedirs(os.path.join(self.runs_dir, tag), exist_ok=True)
-            subprocess.Popen([self.python, os.path.join(self.here, 'bot_gui.py'),
+            subprocess.Popen([self.python, os.path.join(self.here, 'core', 'bot_gui.py'),
                               '--device', dev, '--tag', tag],
                              cwd=self.here, creationflags=CNW)
             return True

@@ -113,7 +113,10 @@ _LIGHT_CARD2 = '#F5F6F8'      # = ctk_theme 浅色 card2
 ADB = P.ADB
 DEV = '127.0.0.1:16384'
 LOG_DIR = P.RUNS
-HOT_PY = os.path.join(HERE, 'hotupdate.py')
+# ⚠ 2026-10-18 目录拆分后：业务 .py 全在 core/，而 HERE = 仓根
+#   ⇒ 必须用「本文件所在目录」，否则拼出的路径根本不存在 ✗
+_SELF_DIR = os.path.dirname(os.path.abspath(__file__))
+HOT_PY = os.path.join(_SELF_DIR, 'hotupdate.py')
 
 # ⭐⭐ 实时计划/进度 —— 从**子进程 stdout**里捡（2026-10-11 用户真机反馈后加的）
 #   ⛔ 病（用户原话）：「**实时棋盘的更新速度有点慢，真机都要执行完了才出执行图**」
@@ -356,7 +359,10 @@ def ensure_sidecar(device, log=print):
     except Exception:                   # noqa: BLE001
         _fo = _fe = subprocess.DEVNULL
     try:
-        subprocess.Popen([MAA_PY, os.path.join(HERE, 'maa_sidecar.py'),
+        subprocess.Popen([MAA_PY,
+                          os.path.join(os.path.dirname(
+                              os.path.abspath(__file__)),
+                              'maa_sidecar.py'),
                           '--device', device, '--port', str(port),
                           '--mumu-index', str(idx)],
                          cwd=HERE, creationflags=CNW,

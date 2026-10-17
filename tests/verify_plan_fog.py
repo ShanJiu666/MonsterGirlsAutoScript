@@ -270,7 +270,7 @@ def main():
     ck('F：**内容块一个都不许当空地**（否则连锁穿过宝箱/海螺 ✗）',
        not _bad_c, '误判: %s' % (_bad_c,))
     ck('F：判据**不看号段、不看名字子串**（旧代码 `号段001`＋`名字含草` ✗）',
-       'PLAIN_SUFFIX and suf' not in open(os.path.join(HERE, 'mapsim.py'),
+       'PLAIN_SUFFIX and suf' not in open(os.path.join(CORE, 'mapsim.py'),
                                           encoding='utf-8').read())
 
     print()

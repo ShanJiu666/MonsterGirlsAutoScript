@@ -147,7 +147,7 @@ def main():
     # ── ④ 闸门在"点四叶草之前"（否则还是白点）──────────────────────
     print()
     print('【4】闸门位置：必须在**第一次点四叶草之前**')
-    src = open(os.path.join(HERE, 'explore_loop.py'), encoding='utf-8').read()
+    src = open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
     lines = src.splitlines()
     s = [n for n, l in enumerate(lines) if l.startswith('def handle_dice(')][0]
     e = [n for n, l in enumerate(lines) if n > s and l.startswith('def ')][0]
