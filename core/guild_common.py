@@ -64,7 +64,12 @@ SWIPE_DOWN_XY = (360, 900, 360, 200, 1200)    # 往**低**楼层
 FLOOR_SWIPES = 3                              # 从 2 楼到 4 楼实测要 3 次
 
 #: 「画面真的变了」的阈值（降采样灰度平均绝对差）
-#: 实测：面板挡着时的"假滑动" = 1.1~2.3；真滚动 = 27.8~79.6 ⇒ 取 15 余量充足 ✓
+#: 实测：面板挡着时的"假滑动" = 1.1~2.3；真滚动 = 27.8~79.6 ⇒ 取 15 余量充足
+#:
+#: ⛔⛔ 2026-10-17 **别再用它判断"有没有面板挡着"**（我试过，是错的）：
+#:   已经在**顶层**时再滚也不动 ⇒ delta 天然很小（实测 0.98/3.45/1.05）
+#:   ⇒ 会把"到顶了"误判成"有面板" ⇒ 进而去点 X（那个坐标是大厅的「活动」✗✗）
+#:   ⇒ 判"到没到炼金层"请用 `_try_alchemy_chest()` **试点自证** ✓
 SCROLL_MIN_DELTA = 15.0
 
 
@@ -456,47 +461,57 @@ def scroll_to_top(b, log=None, times=None, max_swipes=8):
       ① 先**固定往上滚 N 次**（滚到滚不动为止，多滚无害 ✓）
       ② 再让 `_try_alchemy_chest` 用**一组候选点**去试开面板
          （它自带 x×y 容差，正是为这种"位置会漂"设计的 ✓）
-    ⭐⭐⭐⭐ 2026-10-17 **第五版补丁：滚完必须验证，且挡路面板要关**
-      真机事故：派遣做完后**悬赏详情面板没关** ⇒ 5 次滑动全滑在面板上
-        ⇒ 画面纹丝不动，可本函数**无条件 return True** ⇒ 撒谎 ✗
-        ⇒ 炼金 9 个候选点全点在面板的进度行上 ⇒ 报 `panel_not_opened` ✗✗
-      修法：滚前/滚后各取一帧指纹，差值 < `SCROLL_MIN_DELTA` 判"没滚动"
-        ⇒ 点 X 关掉面板（`close_panel` 自带验证）再试，两轮不行**如实 False** ✓
-      ⛔ **不再**在滚的过程中试开面板 —— 那样太慢（每滚一次试 9 个点 = 分钟级）✗
-        真机实测：那样跑 2 分钟都出不来，用户看不到进展 ✗
+    ⛔⛔ 2026-10-17 第五版的**错误修法已废弃**（用户当场指出）：
+      曾用「滚完测帧差 < 15 ⇒ 判有面板 ⇒ 点 X 关面板」，两个致命问题：
+        ① **已在顶层**时再滚也不动 ⇒ 帧差天然小（实测 0.98/3.45/1.05）
+           ⇒ 把到顶了误判成有面板挡着 ✗
+        ② TASK_PANEL_X(656,127) 在公会大厅正好是「**活动**」按钮
+           （OCR 实测 x=667,y=174）⇒ 程序跑去点活动，界面被搞乱 ✗✗
+      ⇒ 把一个失效的 bug 改成了错误点击的 bug，**更糟** ✗
+    ⭐⭐⭐⭐⭐ 2026-10-17 **现行做法（真机已验证）**：
+      滚 N 次 → **试点一次炼金箱** → 开得出炼金面板就算到层
+        真机实测：在炼金层点 (240,445) **直接开出「炼金结果」**（货币 96000）✓
+      开不出 ⇒ 再滚一轮（最多 3 轮）⇒ 仍不行**如实 False**
+      ⛔ **全程不点任何 X / 不碰别的按钮** ✓
+    ⚠ 为什么是每轮试一次而不是每次滑动都试：
+      试点代价 = 1 次 tap + 1 次 OCR ≈ 3 秒；一轮 N 次滑动后再试 1 次
+      ⇒ 最多 3 次试点（9 秒），可接受 ✓
+      ⛔ 若**每次滑动后都试 9 个候选点** ⇒ 分钟级、用户看不到进展 ✗
     ⚠ `times` 参数：默认 `FLOOR_SWIPES + 2`（从 2 楼到顶实测 2~3 次，
       多滚 2 次保证到底；顶楼再滚不动，无副作用 ✓）
     """
     n = int(times) if times is not None else (FLOOR_SWIPES + 2)
-    # ⭐⭐⭐⭐ 2026-10-17 **真机修：滚不动时不能撒谎**
-    #   原来无条件 `return True` ⇒ 卡在悬赏面板里也报"到顶了" ⇒ 炼金全程点空 ✗
-    #   现在：滚完**验证画面真的变了**；没变 ⇒ 关掉挡路的面板再试；仍不行 ⇒ 如实 False ✓
-    _unblocked = 0
+    # ⭐⭐⭐⭐⭐ 2026-10-17 **第二次修**（第一次修错了，用户当场指出）
+    #   ---- 第一次错在哪 ----
+    #     我加了「测 delta，< 15 就判有面板挡着 ⇒ 点 X 关面板」。
+    #     但 ① **已经在顶层**时再滚也不动 ⇒ delta 天然小（实测 0.98/3.45/1.05）
+    #             ⇒ 被误判成"有面板" ✗
+    #         ② `TASK_PANEL_X(656,127)` 在**公会大厅**正好是「**活动**」按钮
+    #             （OCR 实测 x=667 y=174）⇒ 程序跑去点了活动，界面被搞乱 ✗✗
+    #     ⇒ 把"失效"的 bug 改成了"错误点击"的 bug，更糟
+    #   ---- 现在的判据：**试点炼金箱自证**（真机已验证）----
+    #     当前在炼金层时，点 `ALCHEMY_CHEST` **直接开出「炼金结果」面板** ✓
+    #     ⇒ 滚 N 次 → 试点 → 开出炼金面板就算到层；开不出再滚一轮（最多 3 轮）
+    #     ⛔ **全程不点任何 X**、不改动别的界面 ✓
+    _try = 0
     for _attempt in range(3):
-        _before = _frame_sig(b)
         for _ in range(max(1, n)):
             swipe_abs(*SWIPE_UP_XY)
             time.sleep(0.9)
-        _after = _frame_sig(b)
-        _d = _sig_delta(_before, _after)
-        _moved = (_d is None) or (_d >= SCROLL_MIN_DELTA)
-        _log(log, {'guild': 'scroll_top', 'n': n, 'attempt': _attempt,
-                   'delta': None if _d is None else round(_d, 1),
-                   'moved': _moved})
-        if _moved:
+        time.sleep(0.6)                      # 等滚动吸附停稳
+        if _try_alchemy_chest(b, log):
+            _log(log, {'guild': 'scroll_top', 'n': n, 'attempt': _attempt,
+                       'by': 'chest_probe', 'ok': True})
             if _attempt:
-                say('   · 滚到高层了（关掉挡路面板后第 %d 次成功 ✓）' % _attempt)
+                say('   · 第 %d 轮试点才到炼金层 ✓' % (_attempt + 1))
             return True
-        # ── 画面没变 ⇒ 十有八九是**面板挡着**（面板不滚动）──
-        say('   ⚠ 滚了 %d 次画面没变（差 %.1f < %.1f）⇒ 大概有面板挡着，先关掉'
-            % (n, _d if _d is not None else -1, SCROLL_MIN_DELTA))
-        # 派遣/悬赏详情面板的 X；`probe_texts` 用面板特征词验证真关掉了 ✓
-        close_panel(b, TASK_PANEL_X, 'scroll_unblock%d' % _attempt,
-                    probe_texts=('黑晶女仆',), log=log)
-        _unblocked += 1
-        time.sleep(0.8)
-    say('   ⚠ 滚不动（面板可能没关成功）⇒ **如实返回 False**（调用方据此放弃，别硬点）')
-    _log(log, {'guild': 'scroll_top_failed', 'unblocked': _unblocked})
+        _try += 1
+        _log(log, {'guild': 'scroll_top_probe', 'attempt': _attempt,
+                   'by': 'chest_probe', 'ok': False})
+        say('   · 滚了 %d 次还没到炼金层（试点没开出炼金面板）⇒ 再滚一轮'
+            % ((_attempt + 1) * n))
+    say('   ⚠ 3 轮都没到炼金层 ⇒ **如实返回 False**（调用方据此放弃，别硬点别的按钮）')
+    _log(log, {'guild': 'scroll_top_failed', 'tries': _try})
     return False
 
 
