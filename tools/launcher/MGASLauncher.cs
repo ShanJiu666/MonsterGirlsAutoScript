@@ -125,12 +125,35 @@ namespace MGAS
                     if (p.ExitCode != 0)
                     {
                         WriteLog(logFile, output, p.ExitCode);
-                        Fail(root, logFile,
-                            "启动失败（退出码 " + p.ExitCode + "）。\n\n" +
-                            "常见原因：\n" +
-                            "  · 依赖没装全 —— 看 logs\\launcher.log 末尾的报错\n" +
-                            "  · 杀毒软件拦截 —— 把本目录加入白名单后重试\n\n" +
-                            "日志：" + logFile);
+                        // 区分三种失败，给**可操作**的提示（别只丢一句"启动失败"）
+                        bool noDeps = output.Contains("ModuleNotFoundError");
+                        bool selfContained = Directory.Exists(
+                            Path.Combine(root, "python311"));
+                        string msg;
+                        if (noDeps && !selfContained)
+                        {
+                            // 源码目录（没有内嵌 python311）⇒ 用户少了依赖
+                            msg =
+                                "启动失败：缺少 Python 依赖。\n\n" +
+                                "**你下载的是源码，不是「下载即用」包。**\n\n" +
+                                "两种办法：\n" +
+                                "  1.（推荐）去 Releases 下载 MGAS-vX.Y-portable.zip，\n" +
+                                "     解压后双击里面的 MGAS.exe —— 那个自带 Python 与全部依赖\n" +
+                                "  2. 就想跑源码，先装依赖：\n" +
+                                "     pip install -r requirements.txt\n" +
+                                "     然后重新双击本文件\n\n" +
+                                "详细报错见：" + logFile;
+                        }
+                        else
+                        {
+                            msg =
+                                "启动失败（退出码 " + p.ExitCode + "）。\n\n" +
+                                "常见原因：\n" +
+                                "  · 依赖没装全 —— 看 logs\\launcher.log 末尾的报错\n" +
+                                "  · 杀毒软件拦截 —— 把本目录加入白名单后重试\n\n" +
+                                "日志：" + logFile;
+                        }
+                        Fail(root, logFile, msg);
                         return p.ExitCode;
                     }
                 }
