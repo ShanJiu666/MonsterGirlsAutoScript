@@ -15,6 +15,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -51,7 +55,7 @@ ck('② 商人/宝库**仍在**（没改坏）',
 
 print()
 print('【2】结构级：`act_on` 必须**先于**「无视」分支判定')
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _i_act = _src.find("'act_on':")
 _i_use = _src.find("if t not in L['act_on']:")
 ck('③ `if t not in L[act_on]` 那句还在（防我误删）', _i_use > 0)

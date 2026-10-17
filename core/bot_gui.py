@@ -49,7 +49,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
 # ⭐ 2026-10-02：adb 改走 `paths.py` 自动探测（原来写死本机 SDK 路径，
 #   朋友机器上必然不存在 ⇒ 连「环境检查」都过不去）。
@@ -76,6 +76,11 @@ from bot_gui_ui.services import (CNW, DeviceService, LoopRunner,       # noqa: E
 from bot_gui_ui.services import tag_for as _tag_for_impl               # noqa: E402
 from bot_gui_ui.widgets import BoardCanvas, StatusDot                  # noqa: E402
 import customtkinter as ctk                            # noqa: E402  ⭐ T6：整窗迁 ctk
+
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -3709,7 +3714,7 @@ def _set_window_icon(root):
         from PIL import Image, ImageTk
     except Exception:           # noqa: BLE001
         return
-    here = os.path.dirname(os.path.abspath(__file__))
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cands = [
         os.path.join(here, 'tools', 'launcher', 'head_M31302_000.png'),
         os.path.join(here, 'assets', 'head_M31302_000.png'),

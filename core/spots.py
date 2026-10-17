@@ -26,10 +26,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cv2
 import numpy as np
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UNIT = os.path.join(ROOT, 'templates', 'unit')
 RUNS = os.path.join(ROOT, 'runs')
 import repo_paths as RP                                          # noqa: E402
+
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DT = RP.require(RP.DATATABLE, '游戏数据表 server_datatable.json')  # 2026-10-10 去仓库耦合
 
 # ⭐⭐ 2026-10-02 换基准：棋盘几何**改为从 layout.REF 取**，不再在这里写死一份。

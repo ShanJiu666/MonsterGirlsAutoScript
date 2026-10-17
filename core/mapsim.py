@@ -33,6 +33,11 @@ import os
 import random
 import sys
 
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROWS, COLS = 5, 7
@@ -1027,7 +1032,7 @@ def main():
         return
 
     if a.bench:
-        base = os.path.dirname(os.path.abspath(__file__))
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # ⚠ 要用「开局那几轮」的截图（棋盘还满着）；中途的截图大量格已被消耗，统计没意义
         files = []
         for pat in ('runs/**/m*_r000.png', 'runs/**/m*_r001.png', 'runs/**/m*_r002.png'):

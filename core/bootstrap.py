@@ -29,13 +29,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _layout():
-    """认两种摆法，返回 (包根 ROOT, 代码目录 PKG)
+    """→ (包根 ROOT, 代码目录 PKG)
 
-    A) 发布包：`<包根>/bootstrap.py` + `<包根>/mapbot_pc/…`（bat 调的就是这种）
-    B) 开发机：`<mapbot_pc>/bootstrap.py`（本文件在代码目录里）
+    ⚠ 2026-10-17 目录整理后：**代码全在 `core/`**，本文件也在 core/。
+      · ROOT = core/ 的上一级 = 仓根（`templates/` `runs/` `data/` 都在这层）
+      · PKG  = HERE   = core/（bot_gui.py / explore_loop.py 都在这层）
+    旧版那套「认两种摆法」（`isdir(join(HERE,'mapbot_pc'))`）已作废 ✗
     """
-    if os.path.isdir(os.path.join(HERE, 'mapbot_pc')):
-        return HERE, os.path.join(HERE, 'mapbot_pc')
     return os.path.dirname(HERE), HERE
 
 
@@ -134,7 +134,7 @@ def main():
     if hot_only:
         # ⚠ 这里**不确认**：确认的语义是"补丁代码真的被跑起来过"，而这一步没起界面
         return 0
-    gui = os.path.join(PKG, 'bot_gui.py')
+    gui = os.path.join(PKG, 'bot_gui.py')   # PKG 现在就是 core/
     if not os.path.isfile(gui):
         _fatal('找不到界面文件：%s' % gui)
         return 2

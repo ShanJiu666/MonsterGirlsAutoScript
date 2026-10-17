@@ -26,6 +26,11 @@ import targets_cfg as tcfg_mod          # ⭐ 目标方块白名单（用户 202
 from mapbot import Bot, RUNS, ADB, DEV, CREATE_NO_WINDOW
 from mapbot import _is_conn_err      # ⭐ 进图/触摸的"连接类错误"判据**同一份**（别各写一套 ✓）
 
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `templates/` `runs/` `data/` 这些资源都相对**仓根** ⇒ 必须多上一级。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 # ⭐ 2026-10-01：模板/资源根目录。
 #   Android 侧由 `android_autoexplore/tools/port_loop.py` 注入（APK 内只读 ⇒ 指向
 #   filesDir/mapbot_pack）；PC 侧**原来没定义** ⇒ 一调 `_find_ui_tpl` 就 NameError
@@ -33,8 +38,7 @@ from mapbot import _is_conn_err      # ⭐ 进图/触摸的"连接类错误"判�
 try:
     _MAPBOT_ROOT                                       # noqa: B018
 except NameError:
-    _MAPBOT_ROOT = os.path.dirname(os.path.abspath(__file__))
-
+    _MAPBOT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WIN = os.path.join(RUNS, 'loop')
 os.makedirs(WIN, exist_ok=True)
 LOG_PATH = os.path.join(WIN, 'loop_log.json')
@@ -4536,8 +4540,7 @@ def handle_dice(b, log, items, tries=3, st=None):
             _im = b.img()
             if _im is None:
                 return False, {}
-            _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             'templates', 'marks', 'thumb_tab.png')
+            _p = os.path.join(_MGAS_ROOT, 'templates', 'marks', 'thumb_tab.png')
             _t = cv2.imdecode(np.fromfile(_p, np.uint8), cv2.IMREAD_COLOR)
             if _t is None:
                 return False, {}

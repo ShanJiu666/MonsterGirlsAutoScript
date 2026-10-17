@@ -18,6 +18,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -114,7 +118,7 @@ print()
 print('=' * 78)
 print('【④】宝库流程里的 `tap_dlg` 是否都收口到守卫')
 print('=' * 78)
-src = io.open('buypanels.py', encoding='utf-8').read()
+src = io.open(os.path.join(CORE, 'buypanels.py'), encoding='utf-8').read()
 lines = src.splitlines()
 s = next((i for i, l in enumerate(lines) if l.startswith('def vault_flow(')), None)
 e = next((i for i, l in enumerate(lines) if i > s and l.startswith('def ')), None)

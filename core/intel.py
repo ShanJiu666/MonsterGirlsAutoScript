@@ -63,11 +63,16 @@ import os
 import sys
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import guild_common as GC                                     # noqa: E402
+
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 say = GC.say
 

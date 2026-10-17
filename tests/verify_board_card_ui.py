@@ -29,6 +29,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -143,7 +147,7 @@ ck('⑬ ⚠ `hud_var`（右卡那行体力/金币）**仍在** —— 用户指�
 ck('⑭ ⚠ 棋盘**仍画得出图元**（没被删空 ✓）', len(bd.find_all()) > 0,
    '%d 个' % len(bd.find_all()))
 # ⚠ 反向：`_Tip` 悬浮提示还在（说明文字删了，但鼠标悬停仍能看到 ✓）
-_tip_src = io.open('bot_gui.py', encoding='utf-8').read()
+_tip_src = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
 ck('⑮ ⚠ 棋盘的 `_Tip` 悬浮提示**保留**（删的是常驻小字 ✓）',
    '_Tip(self.board' in _tip_src)
 root.destroy()

@@ -27,6 +27,11 @@ import sys
 import threading
 import time
 
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # ⚠ 本文件住在**仓根**（它是运行时组件，不是排障脚本）：
 #   `bot_gui.py` 起 sidecar 时把 cwd 设成仓根、用绝对路径调本文件。
 #   `ROOT` = 仓根 = 本文件所在目录 —— 下面 `import paths` 要靠它。
@@ -34,7 +39,7 @@ import time
 #     注入了「ROOT = 上一级」，后来移回仓根又剥掉了 ⇒ 结果 ROOT 未定义 ⇒
 #     `sys.path.insert(0, ROOT)` 抛 NameError ⇒ `import paths` 失败 ⇒
 #     ADB 退回裸 'adb' ⇒ sidecar 起不来 ⇒ **静默退回 adb 截图（慢 25 倍）** ✗✗
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = ROOT
 
 

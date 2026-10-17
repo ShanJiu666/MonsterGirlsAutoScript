@@ -110,7 +110,7 @@ class LoopRunner:
           （用户口径：「精确规划按钮删掉，之后都一直是依赖规划」⇒ `solver` 恒 True ✓）；
           形参保留是为了**把这个口径写死在代码里**、并且对拍时能双向验证 ✓
         """
-        cmd = [self.python, os.path.join(self.here, 'explore_loop.py'),
+        cmd = [self.python, os.path.join(self.here, 'core', 'explore_loop.py'),
                '--max-round', '45', '--maps', str(maps),
                '--deadline', '420', '--no-dump',
                '--device', device]
@@ -824,7 +824,7 @@ class DeviceService:
     def _scan_screen(self, device, tag=''):
         self.emit('log', '')
         self.emit('log', '▶ 扫描当前屏（只读，不会点任何东西）…')
-        cmd = [self.python, os.path.join(self.here, 'explore_loop.py'),
+        cmd = [self.python, os.path.join(self.here, 'core', 'explore_loop.py'),
                '--device', device, '--scan-bag']
         if tag:
             cmd += ['--tag', tag]

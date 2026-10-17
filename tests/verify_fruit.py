@@ -25,6 +25,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -199,12 +203,12 @@ if os.path.exists(_tp) and os.path.exists(_has):
            bool(_b2) and _b2[0] < F.FRUIT_THR,
            '%s（阈值 %.2f）' % (_b2, F.FRUIT_THR))
     ck('⑨ 用的是 `TM_SQDIFF` + 掩膜（**不是 `TM_CCORR_NORMED`** ✗ 那个会虚高）',
-       'TM_SQDIFF' in io.open('fruit.py', encoding='utf-8').read()
-       or 'cv2.TM_SQDIFF' in io.open('fruit.py', encoding='utf-8').read())
+       'TM_SQDIFF' in io.open(os.path.join(CORE, 'fruit.py'), encoding='utf-8').read()
+       or 'cv2.TM_SQDIFF' in io.open(os.path.join(CORE, 'fruit.py'), encoding='utf-8').read())
 
 print()
 print('【4】接线（收工流程 + 工具栏）')
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _gd = _src.split('def _guild_daily')[1].split('\ndef map_end_kind')[0]
 _pos = {nm: _gd.find(pat) for nm, pat in
         (('派遣', '_gt.run('), ('炼金', '_al.run('), ('情报', '_it.run('),
@@ -221,7 +225,7 @@ ck('⑪ 闸门 = **体力 < `FRUIT_SCAN_MAX_STAMINA`(100)**（用户点名的数
    % getattr(__import__('explore_loop'), 'FRUIT_SCAN_MAX_STAMINA', '（没有）'))
 ck('⑫ 读不到体力 ⇒ **不扫**（fail-closed，别在状态不明时改记录 ✓）',
    '体力读不出来' in _gd and 'skip_stamina_unknown' in _gd)
-_g = io.open('bot_gui.py', encoding='utf-8').read()
+_g = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
 # ⛔⛔ 2026-10-16 **用户口径**（本次）：
 #   「**去掉扫天赋果实按钮**，点天赋果实记录要**能直接在工具那里看到果实记录，
 #     不要还得去日志看**」
@@ -259,13 +263,13 @@ _sv2 = io.open(os.path.join('bot_gui_ui', 'services.py'),
 ck('⑰ ⛔ 「扫果实」那条服务通道也删了（不留死代码 ⇒ 免得日后误解还在用 ✗）',
    'fruit_scan_async' not in _sv2 and 'def _fruit_scan' not in _sv2)
 ck('⑱ ⭐ 收工时自动扫仍在（去掉按钮**不影响**自动扫描 ✓）',
-   '_fr.scan_and_record' in io.open('explore_loop.py', encoding='utf-8').read())
+   '_fr.scan_and_record' in io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read())
 
 print()
 print('【5】记录文件按窗口独立（用户口径：「要每个窗口独立计算」✓）')
 ck('⑯ 记录路径 = `runs/<tag>/fruit_record.json`（跟着 Bot 的 runs 目录 ✓）',
-   'fruit_record.json' in io.open('fruit.py', encoding='utf-8').read()
-   and 'b.runs' in io.open('fruit.py', encoding='utf-8').read())
+   'fruit_record.json' in io.open(os.path.join(CORE, 'fruit.py'), encoding='utf-8').read()
+   and 'b.runs' in io.open(os.path.join(CORE, 'fruit.py'), encoding='utf-8').read())
 
 # ⛔⛔ 2026-10-16 **撤回守门**（我自己试出来的真不一致）：
 #   没 Bot 时的路径必须**与 `Bot.__init__` 逐字同口径** ——
@@ -288,7 +292,7 @@ ck('⑲ ⭐ `record_path(None, "acc1")` == `runs/acc1/fruit_record.json`'
    '（有 tag 就跟 tag ✓ 与 `Bot(tag=...).runs` 一致）',
    _rp(None, 'acc1').replace('\\', '/').endswith('/runs/acc1/fruit_record.json'),
    _rp(None, 'acc1'))
-_guisrc = io.open('bot_gui.py', encoding='utf-8').read()
+_guisrc = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
 ck('⑳ ⭐ GUI 的 `_fruit_path` **复用 `fruit.record_path`**'
    '（不自己拼路径 ⇒ 不会与扫描分叉 ✓）',
    'import fruit as _fr' in _guisrc and '_fr.record_path(None, self.tag)'

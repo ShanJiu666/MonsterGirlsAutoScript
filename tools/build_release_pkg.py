@@ -11,7 +11,7 @@
     使用说明书.md / README.md / LICENSE / DISCLAIMER.md
     python311\\               ← 内嵌 Python（免安装）
     venv\\                    ← 依赖（numpy/cv2/onnxruntime/airtest…）
-    bot_gui.py / explore_loop.py / …  ← 业务代码
+    core\\bot_gui.py / core\\explore_loop.py / …  ← 业务代码（在 core/ 里）
     templates\\ data\\         ← 识别资源
     tools\\ tests\\ devtools\\ docs\\ _verify\\
 
@@ -397,9 +397,9 @@ def main():
         'set PYTHONIOENCODING=utf-8\r\n'
         'set PYTHONUTF8=1\r\n'
         'if exist "venv\\Scripts\\python.exe" (\r\n'
-        '  "venv\\Scripts\\python.exe" bot_gui.py\r\n'
+        '  "venv\\Scripts\\python.exe" core\\bot_gui.py\r\n'
         ') else (\r\n'
-        '  python bot_gui.py\r\n'
+        '  python core\\bot_gui.py\r\n'
         ')\r\n'
         'if errorlevel 1 pause\r\n')
     print('  ✓ 幻想少女公会-自动探索.bat（备用启动）')

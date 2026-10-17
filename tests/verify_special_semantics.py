@@ -24,6 +24,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -103,8 +107,8 @@ ck('⑪ ⭐ 两条**现在同为 10**（用户 2026-10-09：「幸运草阈值�
    int(EL.CLOVER_MIN_REROLL) == int(EL.MIMIC_CLOVER_MIN) == 10,
    '摇色子=%s 宝箱怪=%s' % (EL.CLOVER_MIN_REROLL, EL.MIMIC_CLOVER_MIN))
 ck('⑪b ⚠ 但仍是**两个独立常量**（语义不同：摇色子 vs 买装备 ⇒ 明天可只改一个 ✓）',
-   'CLOVER_MIN_REROLL' in io.open('explore_loop.py', encoding='utf-8').read()
-   and 'MIMIC_CLOVER_MIN' in io.open('explore_loop.py', encoding='utf-8').read())
+   'CLOVER_MIN_REROLL' in io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
+   and 'MIMIC_CLOVER_MIN' in io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read())
 ck('⑫ 金币闸门管**只有**商人/宝库（不含宝箱怪 ✓ 它们花草不花金币）',
    tuple(SP.BUY_OUT_NAMES) == ('旅行商人', '黄金宝库')
    and not any(n in SP.BUY_OUT_NAMES for n in SP.MIMIC_NAMES))
@@ -131,7 +135,7 @@ ck('⑲ 8 个特殊方块**每个都有** `describe()` 说明',
    all(TC.describe(n).strip() for n in TC.SPECIAL_NAMES))
 ck('⑳ 未知名字也有**兜底**说明（不返回空）',
    bool(TC.describe('某个没配过的名字').strip()))
-_src = io.open('bot_gui.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
 ck('㉑ GUI 里有「❗」按钮 + `_show_special_help`',
    "'❗'" in _src and '_show_special_help' in _src)
 ck('㉒ GUI 里 8 个勾选框**全部可勾**（不再 `disabled`）',

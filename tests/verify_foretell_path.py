@@ -14,6 +14,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -64,7 +68,7 @@ print('【1】`is_reward_panel` 必须 **False**（这是元凶判据）')
 #   （本项目第四次踩这个坑：v1.62c / v1.67 / v1.68 都是"注释里必然逐字引用旧判据"）
 import re as _re
 
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _seg = _src.split('def is_reward_panel')[1].split('\ndef ')[0]
 # ⛔⛔ 2026-10-15 **修这条断言自己的过时正则**（它 10-12 起就**恒判假**了 ✗）
 #   ---- 病 ----

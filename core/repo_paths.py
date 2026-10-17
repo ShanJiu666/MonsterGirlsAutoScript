@@ -25,7 +25,12 @@ from __future__ import annotations
 
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(HERE, 'data')          # 仓内自备素材目录（可选）
 SHARED = DATA                              # 兼容别名（旧调用方用这个名字）
 

@@ -34,6 +34,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -62,7 +66,7 @@ def ck(name, cond, detail=''):
                          ('  ' + detail) if detail else ''))
 
 
-SRC = io.open('bot_gui.py', encoding='utf-8').read()
+SRC = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
 # ⚠ 必须**剥掉注释/docstring**再查（本项目已踩过 4 次：
 #   留档注释里会**逐字引用**旧写法 ⇒ 直接 grep 会假红 ✗）
 _tree = ast.parse(SRC)
@@ -209,7 +213,7 @@ except Exception as _e:
 
 print()
 print('【3】与 `explore_loop.stamina_line()` 同源（单一口径 ✓）')
-_el = io.open('explore_loop.py', encoding='utf-8').read()
+_el = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 ck('⑪ `explore_loop.stamina_line()` 仍用**逐段 + 30 秒补偿**'
    '（GUI 复用的是这套 ✓ 别再改歪 ✗）',
    'regen = dt / 30.0' in _el and 'max(0.0, (s0 - s1) + regen)' in _el)

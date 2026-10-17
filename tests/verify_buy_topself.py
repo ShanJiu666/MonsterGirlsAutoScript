@@ -34,6 +34,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -114,7 +118,7 @@ ck('① `BUY_SCORE_MIN` **保持 0.85**（没被降 ✗ 那是当年的卡死防
 ck('② `BUY_TOP_GAP_MIN` = 0.30（离线标定值 ✓）',
    abs(float(getattr(EL, 'BUY_TOP_GAP_MIN', -1)) - 0.30) < 1e-9,
    'BUY_TOP_GAP_MIN=%s' % getattr(EL, 'BUY_TOP_GAP_MIN', '（没有）'))
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _seg = _src.split('def cells_of')[1].split('\ndef ')[0]
 _strong = [l.strip() for l in _seg.splitlines() if l.strip().startswith('strong =')]
 ck('③ `cells_of` 里 `strong` = **老判据 `or` 顶部自洽**（两条都要在 ✓）',

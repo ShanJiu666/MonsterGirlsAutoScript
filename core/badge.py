@@ -22,15 +22,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cv2
 import numpy as np
 
-TPL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                   'templates', 'marks', 'recommendIcon__mid_ico_tuijian_0002.png')
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `templates/` `runs/` `data/` 这些资源都相对**仓根** ⇒ 必须多上一级。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+TPL = os.path.join(_MGAS_ROOT, 'templates', 'marks', 'recommendIcon__mid_ico_tuijian_0002.png')
 # ⭐ 奖励行的「推荐」标记**不是**地图上那个 14x14 徽章，而是 `mid_ico_tuijian_0001`
 #   （33x33 = **绿色方框 + 右上角一个小绿拇指**，游戏把它按 ~4.4 倍画在整格上 ⇒ 148px）。
 #   2026-09-25 实机标定（用户指认「奖励行 4 格，大拇指在第 3 格」）：
 #     第1格 形状0.113 / 第2格 0.315 / **第3格 0.745** / 第4格 0.289
 #   ⇒ 噪声地板 ≤0.32、真标记 0.74，阈值 0.55 分得很开。
-REWARD_TPL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          'templates', 'marks', 'tj_mid_ico_tuijian_0001.png')
+REWARD_TPL = os.path.join(_MGAS_ROOT, 'templates', 'marks', 'tj_mid_ico_tuijian_0001.png')
 # ⚠ 2026-09-25 二次标定（把 6 张真实摇色子截图全打分）：
 #   真标记恒为 **缩放 4.5、形状/配色 0.92~0.95**（dice_2 / dice_ok_*）；
 #   而缩放 3.8 处会凑出 **0.55/0.55** 的噪声（dice_0/dice_1）——正好卡在旧阈值 0.55 上。

@@ -20,6 +20,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -77,8 +81,8 @@ ck('② 它**覆盖**全部特殊方块（一个不漏 ✓）',
 ck('③ 无重复',
    len(TC.DISPLAY_ORDER) == len(set(TC.DISPLAY_ORDER)))
 ck('④ GUI 用的是 `DISPLAY_ORDER`（不再 `list(set)` ✗）',
-   'TC.DISPLAY_ORDER' in io.open('bot_gui.py', encoding='utf-8').read())
-_src = io.open('bot_gui.py', encoding='utf-8', newline='').read()
+   'TC.DISPLAY_ORDER' in io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read())
+_src = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8', newline='').read()
 _CODE = '\n'.join(ln for ln in _src.splitlines()
                   if not ln.lstrip().startswith('#'))
 ck('⑤ ⚠ **代码里**没有 `list(TC.BLOCK_NAMES)`（注释里提到不算 ✓）',

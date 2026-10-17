@@ -39,6 +39,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -75,7 +79,7 @@ def skip(name, detail=''):
     SKIP.append(name)
 
 
-_S = io.open('spots.py', encoding='utf-8').read()
+_S = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8').read()
 _CODE = '\n'.join(l for l in _S.splitlines() if not l.lstrip().startswith('#'))
 
 print('=' * 94)
@@ -145,7 +149,7 @@ for _p, _tag in ((_B, '今天 B（**2,1 真有沙堡**）'), (_A, '昨天 A（**
 
 print()
 print('【3】⚠⚠ 对照项：**回退任一半就会坏**（证明两条缺一不可 ✓）')
-_BAK = io.open('spots.py', encoding='utf-8', newline='').read()
+_BAK = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8', newline='').read()
 try:
     if not _HAVE_B:
         # ⚠ 对照项本身就要拿那两帧算 ⇒ 没有语料时**不能假装跑过**
@@ -154,7 +158,7 @@ try:
     else:
         # 半①：只把门槛退回去（保留形状判据）
         _m1 = _BAK.replace('MULTI_BLOCK_MIN = 0.28', 'MULTI_BLOCK_MIN = 0.35')
-        io.open('spots.py', 'w', encoding='utf-8', newline='').write(_m1)
+        io.open(os.path.join(CORE, 'spots.py'), 'w', encoding='utf-8', newline='').write(_m1)
         importlib.reload(spots)
         importlib.reload(EL)
         _c1, _ = _castle_and_camp(_B) if os.path.exists(_B) else ({}, {})
@@ -164,7 +168,7 @@ try:
         # 半②：只把形状判据退成"永远采纳"
         _m2 = _BAK.replace('if float(_l0[0][0]) >= 0.85:',
                            'if False:      # 对照：形状判据关掉')
-        io.open('spots.py', 'w', encoding='utf-8', newline='').write(_m2)
+        io.open(os.path.join(CORE, 'spots.py'), 'w', encoding='utf-8', newline='').write(_m2)
         importlib.reload(spots)
         importlib.reload(EL)
         _c2, _cp2 = _castle_and_camp(_B) if os.path.exists(_B) else ({}, {})
@@ -177,10 +181,10 @@ try:
         ck('⑪ ⚠ **只加门槛不够**：关掉形状判据 ⇒ 含营地的 `1,2` 摆放被采纳（营地被吞 ✓）',
            _swallowed, str(sorted(set(v[2] for v in _c2.values()))))
 finally:
-    io.open('spots.py', 'w', encoding='utf-8', newline='').write(_BAK)
+    io.open(os.path.join(CORE, 'spots.py'), 'w', encoding='utf-8', newline='').write(_BAK)
     importlib.reload(spots)
     importlib.reload(EL)
-_after = io.open('spots.py', encoding='utf-8', newline='').read()
+_after = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8', newline='').read()
 ck('⑫ 还原**逐字节一致** ✓', _after == _BAK)
 
 print()

@@ -14,6 +14,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -105,14 +109,14 @@ ck('⑪ ⚠ 别的卡名（如「丰收」）**不顺带停**',
 
 print()
 print('【5】链路口径一致（explore_loop 认这四个 stop 值）')
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 ck('⑫ `explore_loop` 传了 `stop_elem_purple/orange` 两个 flag',
    "'stop_elem_purple': STOP_ELEM_PURPLE" in _src
    and "'stop_elem_orange': STOP_ELEM_ORANGE" in _src)
 ck('⑬ `explore_loop` 的 `_do_stop` 认「元素·紫色」「元素·橙色」',
    "'元素·紫色' in _why and STOP_ELEM_PURPLE" in _src
    and "'元素·橙色' in _why and STOP_ELEM_ORANGE" in _src)
-_bsrc = io.open('buypanels.py', encoding='utf-8').read()
+_bsrc = io.open(os.path.join(CORE, 'buypanels.py'), encoding='utf-8').read()
 import re as _re
 
 _bpos = _bsrc.find("_tier11 = ")      # 新加的日志行（应存在，但**不是**判据）

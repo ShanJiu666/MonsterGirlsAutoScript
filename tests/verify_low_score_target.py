@@ -34,6 +34,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -67,8 +71,8 @@ def skip(name, detail=''):
     SKIP.append(name)
 
 
-_SRC = io.open('targets_cfg.py', encoding='utf-8').read()
-_EL = io.open('explore_loop.py', encoding='utf-8').read()
+_SRC = io.open(os.path.join(CORE, 'targets_cfg.py'), encoding='utf-8').read()
+_EL = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _ELC = '\n'.join(l for l in _EL.splitlines() if not l.lstrip().startswith('#'))
 # ⚠⚠ 本组必须用**确定的**配置，不能读本机 `runs/target_types.json`。
 #   原因：那份配置是**用户现场**（各人勾选不同、且 runs/ 不入仓）。

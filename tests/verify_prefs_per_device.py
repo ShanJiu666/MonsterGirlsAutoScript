@@ -34,6 +34,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -70,15 +74,15 @@ _CODE = '\n'.join(l for l in _S.splitlines() if not l.lstrip().startswith('#'))
 ck('① `Prefs` 有 `DEV_PREFIX`', 'DEV_PREFIX' in _CODE)
 ck('② ⭐ `Prefs.__init__` 收 `device`', 'device=' in _CODE and 'self.dev_name' in _CODE)
 ck('③ ⭐⭐ `Prefs.__init__` 收 `root`（**可重定向** ✓）',
-   'root=LOG_DIR' in io.open('bot_gui.py', encoding='utf-8').read()
+   'root=LOG_DIR' in io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
    or 'root=LOG_DIR' in _S)
 ck('④ 有 `_migrate_once`（老配置自动搬过来 ✓）', '_migrate_once' in _CODE)
 ck('⑤ 有 `load_bag_every` / `save_bag_every` ✓',
    'load_bag_every' in _CODE and 'save_bag_every' in _CODE)
-_EL = io.open('explore_loop.py', encoding='utf-8').read()
+_EL = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 ck('⑥ ⭐ 子进程认 `MAPBOT_TARGETS_CFG`（读**同一份** ✓）',
    'MAPBOT_TARGETS_CFG' in _EL)
-_G = io.open('bot_gui.py', encoding='utf-8').read()
+_G = io.open(os.path.join(CORE, 'bot_gui.py'), encoding='utf-8').read()
 ck('⑦ ⭐ GUI 把 `targets_cfg_path=` 传给子进程',
    'targets_cfg_path=' in _G)
 ck('⑧ ⭐ 升星输入框改成**读回最近一次**（不再写死 10 ✗）',

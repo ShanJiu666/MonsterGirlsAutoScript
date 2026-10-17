@@ -38,8 +38,11 @@ import os
 import cv2
 import numpy as np
 
-TPL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       'templates', 'fixed')
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `templates/` `runs/` `data/` 这些资源都相对**仓根** ⇒ 必须多上一级。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+TPL_DIR = os.path.join(_MGAS_ROOT, 'templates', 'fixed')
 
 # ── 屏幕规格（PC 端锁定，别改）─────────────────────────────────────────
 PC_W, PC_H = 720, 1280

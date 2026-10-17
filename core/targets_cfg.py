@@ -30,8 +30,12 @@ import json
 import os
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PSEUDO_MARK = '★标记格'
 PSEUDO_EXPLORE = '★紫橙探索格'
 # ⭐⭐ 2026-10-17 用户口径（原话）：「特殊方块勾选商人，宝库，**限时礼包**，

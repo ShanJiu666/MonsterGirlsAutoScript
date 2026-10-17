@@ -22,10 +22,15 @@ import time
 import cv2
 import numpy as np
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ⭐ 2026-10-02：改走 `paths.py` 自动探测（原来写死本机 SDK 路径）
 sys.path.insert(0, HERE)
 import paths as P                                      # noqa: E402
+
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 ADB = P.ADB
 CNW = 0x08000000 if os.name == 'nt' else 0

@@ -33,7 +33,12 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `sys.path` 仍要 `core/`（兄弟模块在这儿），但 `templates/` `runs/` `data/`
+#   这些资源都相对**仓根** ⇒ 必须多上一级，否则全读不到。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(HERE)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
@@ -211,7 +216,7 @@ _ALLOWED_FRAGMENTS = (
 
 def _check_paths():
     """跑 `paths.py` 体检（adb / 模板 / MuMu / 数据表）"""
-    pp = os.path.join(HERE, 'paths.py')
+    pp = os.path.join(HERE, 'core', 'paths.py')
     if not os.path.exists(pp):
         return False
     rc, out = run(['paths.py'], timeout=180)
@@ -282,7 +287,7 @@ def main():
     # ── A/B/C：提速层自检 ──────────────────────────────────────────────
     print()
     print('【A】提速层 fixed.py（固定锚点 + 模板快查，PC 独有）')
-    if not os.path.exists(os.path.join(HERE, 'fixed.py')):
+    if not os.path.exists(os.path.join(HERE, 'core', 'fixed.py')):
         check('fixed.py 存在', False, '缺文件')
     else:
         rc, out = run(['fixed.py'], timeout=120)
@@ -819,7 +824,7 @@ def main():
     # ── E：热路径确实用固定坐标 ────────────────────────────────────────
     print()
     print('【C】热路径确实在用固定坐标（防"改了 fixed.py 却退回 OCR"）')
-    elp = os.path.join(HERE, 'explore_loop.py')
+    elp = os.path.join(HERE, 'core', 'explore_loop.py')
     src = io.open(elp, encoding='utf-8').read() if os.path.exists(elp) else ''
     if not src:
         check('explore_loop.py 存在', False)
@@ -829,7 +834,7 @@ def main():
                   for f in ('fx_anchor', 'fx_has', 'fx_at', 'fx_tap')))
         try:
             import fixed as _fx
-            _fixsrc = io.open(os.path.join(HERE, 'fixed.py'),
+            _fixsrc = io.open(os.path.join(HERE, 'core', 'fixed.py'),
                               encoding='utf-8').read()
             _lb = _fx.A('lime_back')        # ⭐ 锚点要走 A()，不是模块属性
             _eb = _fx.A('equip_back')
@@ -909,7 +914,7 @@ def main():
         "    __import__(m)\n"
         "import layout\n"
         "raise SystemExit(0 if layout.self_test(verbose=False) else 1)\n")
-    probe = os.path.join(HERE, '_gate_probe.py')
+    probe = os.path.join(HERE, 'core', '_gate_probe.py')
     with io.open(probe, 'w', encoding='utf-8', newline='\n') as f:
         f.write(code)
     try:
@@ -931,9 +936,9 @@ def main():
     #   adb（0.33s/张 vs MAA 0.013s/张，**慢 25 倍**），而它只打一行「慢一些」
     #   不报错 ⇒ 这件事被掩盖了很久，用户全程不知情 ✗
     try:
-        _guisrc = io.open(os.path.join(HERE, 'bot_gui.py'),
+        _guisrc = io.open(os.path.join(HERE, 'core', 'bot_gui.py'),
                           encoding='utf-8').read()
-        _rcsrc = io.open(os.path.join(HERE, 'run_collect.py'),
+        _rcsrc = io.open(os.path.join(HERE, 'devtools', 'run_collect.py'),
                          encoding='utf-8').read()
     except Exception:                                   # noqa: BLE001
         _guisrc = _rcsrc = ''
@@ -960,7 +965,7 @@ def main():
     #   （宝库是整格替换，分类器立刻看得出变化；商人不行 —— 用户原话
     #     「宝库买完才会消失」说的就是这个差别。）
     try:
-        _elsrc = io.open(os.path.join(HERE, 'explore_loop.py'),
+        _elsrc = io.open(os.path.join(HERE, 'core', 'explore_loop.py'),
                          encoding='utf-8').read()
     except Exception:                                   # noqa: BLE001
         _elsrc = ''
@@ -1191,7 +1196,7 @@ def main():
         # ---- 宝库面板搜索带（2026-10-02 真机「无法正常购买黄金宝库」）----
         try:
             import buypanels as _bp
-            _bpsrc = io.open(os.path.join(HERE, 'buypanels.py'),
+            _bpsrc = io.open(os.path.join(HERE, 'core', 'buypanels.py'),
                              encoding='utf-8').read()
             # ⭐ 用**真机实测坐标**喂判据：宝库「购买 10000」在 720p 设备系 (600,963)
             _bp_btn = _bp._btn([{'text': '购买', 'cx': 600, 'cy': 963},

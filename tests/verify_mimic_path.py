@@ -14,6 +14,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -126,7 +130,7 @@ else:
 
 print()
 print('【结构级】`act_on` 含两个宝箱怪 + `popups` 有对应分支')
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 ck('④ `act_on` 含金属/机巧宝箱怪',
    '金属宝箱怪' in EL.L['act_on'] and '机巧宝箱怪' in EL.L['act_on'],
    str(EL.L['act_on']))

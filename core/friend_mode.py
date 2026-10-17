@@ -20,7 +20,9 @@
 """
 import os
 
+# ⚠ 本文件在 `core/`：HERE = core/，仓根 = 上一级
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 # ⚠⚠ 两个位置都要看（2026-10-03 实战踩到）：
 #   ① 发布包里 `friend_mode.flag` 在**包根**（与 venv/mapbot_pc 同级），bootstrap.py 读它并设
 #      环境变量 `MAPBOT_FRIEND=1` —— 正常链路走这条 ✓
@@ -28,8 +30,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 #      `启动.bat`、或从别处拷来的半成品包），环境变量就没人设 ⇒ 掉回开发版
 #      ⇒ 表现成"发给朋友了却还有精确规划/存图勾选框" ✗✗
 #   ⇒ 所以这里也认**文件**：同目录一份、包根（上一层）一份，双保险 ✓
-FLAG = os.path.join(HERE, 'friend_mode.flag')
-FLAG_PKG = os.path.join(os.path.dirname(HERE), 'friend_mode.flag')
+FLAG = os.path.join(HERE, 'friend_mode.flag')          # core/ 里那份（一般没有）
+FLAG_PKG = os.path.join(ROOT, 'friend_mode.flag')      # 仓根/包根那份（真正生效的）
 
 
 def _from_env():

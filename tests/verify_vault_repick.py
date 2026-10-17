@@ -28,6 +28,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -58,7 +62,7 @@ print('=' * 94)
 # ── ① 结构级：有 `_PROBED` 且被三处使用 ──────────────────────
 print()
 print('【1】结构级：`_PROBED`（读名时点过的格）')
-_src = io.open('buypanels.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'buypanels.py'), encoding='utf-8').read()
 _code = '\n'.join(ln for ln in _src.splitlines() if not ln.lstrip().startswith('#'))
 ck('① 有模块级 `_PROBED`', '_PROBED' in _src and hasattr(BP, '_PROBED'))
 ck('② `vault_pick` 探测时**记入** `_PROBED`',

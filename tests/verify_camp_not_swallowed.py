@@ -31,6 +31,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -66,7 +70,7 @@ def skip(name, detail=''):
     SKIP.append(name)
 
 
-_S = io.open('spots.py', encoding='utf-8').read()
+_S = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8').read()
 _CODE = '\n'.join(l for l in _S.splitlines() if not l.lstrip().startswith('#'))
 rows = spots.spot_rows() or {}
 
@@ -176,7 +180,7 @@ if not _in_repo_frame:
          '缺真机语料 runs/r_194934_0.png（发布版不带私有录屏）⇒ 未真正验证')
 else:
     # 临时把阈值改到不可能触发，看营地会不会又被吞
-    _SRC_BAK = io.open('spots.py', encoding='utf-8', newline='').read()
+    _SRC_BAK = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8', newline='').read()
     _crlf = '\r\n' in _SRC_BAK
     NL = '\r\n' if _crlf else '\n'
     try:
@@ -187,7 +191,7 @@ else:
         if _mut == _SRC_BAK:
             ck('⑪-prep 对照项能改到代码（替换目标存在 ✓）', False,
                '替换没生效 ⇒ 后续对照无意义 ✗')
-        io.open('spots.py', 'w', encoding='utf-8', newline='').write(_mut)
+        io.open(os.path.join(CORE, 'spots.py'), 'w', encoding='utf-8', newline='').write(_mut)
         importlib.reload(spots)
         import explore_loop as _EL2
         importlib.reload(_EL2)
@@ -200,11 +204,11 @@ else:
            tuple(v2.get('anchor') or ()) == (1, 2),
            'anchor=%s name=%s' % (v2.get('anchor'), v2.get('name')))
     finally:
-        io.open('spots.py', 'w', encoding='utf-8', newline='').write(_SRC_BAK)
+        io.open(os.path.join(CORE, 'spots.py'), 'w', encoding='utf-8', newline='').write(_SRC_BAK)
         importlib.reload(spots)
 
     # 复查还原干净
-    _after = io.open('spots.py', encoding='utf-8', newline='').read()
+    _after = io.open(os.path.join(CORE, 'spots.py'), encoding='utf-8', newline='').read()
     ck('⑫ 还原**逐字节一致**', _after == _SRC_BAK)
 
 print()

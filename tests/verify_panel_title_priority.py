@@ -26,6 +26,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -65,7 +69,7 @@ print('【1】结构级')
 ck('① 有 `_panel_title_of`', hasattr(EL, '_panel_title_of'))
 ck('② 有 `_PANEL_TITLES` 表', hasattr(EL, '_PANEL_TITLES')
    and len(EL._PANEL_TITLES) >= 4, str(getattr(EL, '_PANEL_TITLES', ())[:5]))
-_src = io.open('explore_loop.py', encoding='utf-8').read()
+_src = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _code = '\n'.join(l for l in _src.splitlines() if not l.lstrip().startswith('#'))
 ck('③ 分派入口用了 `_panel_title_of`', '_panel_title_of(items)' in _code)
 ck('④ ⚠ 它用**等于**判据（`in _txts`），不是子串 `fb`（否则又会被正文骗 ✗）',

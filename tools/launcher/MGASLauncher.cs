@@ -58,7 +58,7 @@ namespace MGAS
                 }
 
                 // ── ② 找入口脚本 ──────────────────────────────────────────
-                string entry = Path.Combine(root, "bot_gui.py");
+                string entry = Path.Combine(root, "core", "bot_gui.py");
                 if (!File.Exists(entry))
                 {
                     Fail(root, logFile,
@@ -172,6 +172,10 @@ namespace MGAS
                 @"python311\Lib\site-packages\cv2\__init__.py",
                 @"python311\Lib\site-packages\numpy\__init__.py",
                 @"data\server_datatable.json",
+                // ⚠ 业务代码在 core/（2026-10-17 目录整理）
+                @"core\bot_gui.py",
+                @"core\explore_loop.py",
+                @"core\spots.py",
             };
             foreach (string rel in critical)
             {

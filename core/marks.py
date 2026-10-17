@@ -21,7 +21,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cv2
 import numpy as np
 
-TPL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'marks')
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `templates/` `runs/` `data/` 这些资源都相对**仓根** ⇒ 必须多上一级。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TPL_DIR = os.path.join(_MGAS_ROOT, 'templates', 'marks')
 MARKS = [('boss', 'bossIcon__top_int_BOSS_0001.png'),
          ('recommend', 'recommendIcon__mid_ico_tuijian_0002.png'),
          ('clover', 'cloverIcon__DL_siyecao.png'),
@@ -42,6 +45,8 @@ MARKS = [('boss', 'bossIcon__top_int_BOSS_0001.png'),
 #   （历史标定：地块贴图设计 30x30、格距 32px，游戏按 4.5 倍画 ⇒ 1080p 格距 144；
 #     720p = 144 * 0.6667 = 96 ✓ 与 layout.REF 完全一致）
 import layout as _layout_mod
+
+
 
 _REF = _layout_mod.REF
 GRID = dict(x0=float(_REF['grid_x0']), y0=float(_REF['grid_y0']),
@@ -141,8 +146,7 @@ def load_tpls():
         out[key] = img
     # ⭐ 2026-09-26：额外加载「实测裁出来」的幸运草模板
     #   （实例B那台 recommend 会压过 clover ⇒ 用真实像素重裁一个，自匹配 0.978/0.931 ✓）
-    _live = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         'templates', 'clover_live.png')
+    _live = os.path.join(_MGAS_ROOT, 'templates', 'clover_live.png')
     if os.path.exists(_live):
         _img = cv2.imdecode(np.fromfile(_live, dtype=np.uint8),
                             cv2.IMREAD_UNCHANGED)
@@ -151,7 +155,7 @@ def load_tpls():
     # ⭐ 2026-09-26：把 `templates/<类型>_*.png` 全部当作该类型的**样本变体** ✓
     #   （用户确认过的实拍样本裁出来的模板，比游戏原始小图标更能分清大拇指/幸运草 ✓）
     import glob as _glob
-    _tdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+    _tdir = os.path.join(_MGAS_ROOT, 'templates')
     _variants = {}
     for _f in _glob.glob(os.path.join(_tdir, '*.png')):
         _base = os.path.basename(_f)[:-4]

@@ -40,6 +40,10 @@ import os
 import sys
 import time
 
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `templates/` `runs/` `data/` 这些资源都相对**仓根** ⇒ 必须多上一级。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:                                    # ⭐ v0.61：两端共用一套「弹窗系」API
@@ -528,7 +532,7 @@ VAULT_PRIORITY = ('四叶草', '天赋果实')
 
 # 「具体奖励」图标模板（已随仓提供，见 templates/items/）
 #   天赋果实 = Special_Item D00002_001 / 四叶草(幸运草) = D00002_000
-ITEM_TPL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'items')
+ITEM_TPL_DIR = os.path.join(_MGAS_ROOT, 'templates', 'items')
 ITEM_TPL = {'天赋果实': ['D00002_001.png'],
             '四叶草': ['D00002_000.png', 'D00002_000_2.png']}
 ICON_FILL = 0.94          # 图标占格子间距的比例（实测 135/144 ✓）
@@ -685,7 +689,7 @@ def _qty_tmp_path():
         pass
     if os.environ.get('MAPBOT_RUNS'):
         cands.append(os.environ['MAPBOT_RUNS'])
-    cands.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs'))
+    cands.append(os.path.join(_MGAS_ROOT, 'runs'))
     for d in cands:
         try:
             os.makedirs(d, exist_ok=True)

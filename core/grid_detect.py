@@ -16,7 +16,14 @@
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
+
+# ⚠ 本文件住在 `core/` 里：仓根 = 上一级目录。
+#   `templates/` `runs/` `data/` 这些资源都相对**仓根** ⇒ 必须多上一级。
+_MGAS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 try:
     import cv2
@@ -211,7 +218,7 @@ if __name__ == '__main__':
     import glob
     import os
     import sys
-    HERE = os.path.dirname(os.path.abspath(__file__))
+    HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     paths = sys.argv[1:] or (
         glob.glob(os.path.join(HERE, 'runs', 'acc2', '*.png'))[:3] +
         glob.glob(os.path.join(HERE, 'runs', 'm*_r00*.png'))[:3] +

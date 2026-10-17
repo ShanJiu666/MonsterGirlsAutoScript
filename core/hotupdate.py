@@ -67,7 +67,7 @@ try:                                    # GBK 控制台打中文/✓ 会炸
 except Exception:                       # noqa: BLE001  （pythonw 下 stdout 可能是 None）
     pass
 
-HERE = os.path.dirname(os.path.abspath(__file__))       # mapbot_pc/（本文件所在目录）
+HERE = os.path.dirname(os.path.abspath(__file__))       # core/（本文件所在目录 = 代码目录）
 
 # ⭐⭐⭐⭐ 2026-10-06 用户报「启动时会闪过两次命令窗口」—— 本模块也在启动链上
 #   引导层由 `启动.bat` 的 `start "" pythonw.exe bootstrap.py` 拉起 ⇒ **完全没有控制台**
@@ -179,7 +179,19 @@ def state_path():
 
 
 def version_file():
-    return os.path.join(pkg_dir(), 'PC_VERSION')
+    """`PC_VERSION` 的位置。
+
+    ⚠ 2026-10-17 目录整理后：**代码在 `core/`**，但 `PC_VERSION` 留在**包根**
+      （它描述"整个包"的版本，不是代码目录的）⇒ 先找包根、再退回代码目录。
+      不改这里的话 `pack_version()` 会回落 `'0.0'`，状态栏显示「包 v0.0」✗
+    """
+    pkg = pkg_dir()
+    root = os.path.dirname(pkg)              # core/ 的上一级 = 包根
+    for d in (root, pkg):
+        p = os.path.join(d, 'PC_VERSION')
+        if os.path.isfile(p):
+            return p
+    return os.path.join(root, 'PC_VERSION')  # 都不在 ⇒ 返回包根那个（报错更准）
 
 
 # ───────────────────────── 小工具 ─────────────────────────

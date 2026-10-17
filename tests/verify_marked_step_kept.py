@@ -21,6 +21,10 @@ _os = __import__('os')
 _sys = __import__('sys')
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 ROOT = _os.path.dirname(_HERE)
+# ⚠ 业务模块已移进 `core/`（2026-10-17 目录整理）⇒ 也要能 import 到
+CORE = _os.path.join(ROOT, "core")          # _MGAS_CORE_ADDED
+if CORE not in _sys.path:
+    _sys.path.insert(0, CORE)
 if ROOT not in _sys.path:
     _sys.path.insert(0, ROOT)
 try:
@@ -43,7 +47,7 @@ def ck(name, cond, detail=''):
     (OK if cond else BAD).append(name)
 
 
-_SRC = io.open('explore_loop.py', encoding='utf-8').read()
+_SRC = io.open(os.path.join(CORE, 'explore_loop.py'), encoding='utf-8').read()
 _CODE = '\n'.join(l for l in _SRC.splitlines() if not l.lstrip().startswith('#'))
 
 print('=' * 94)
