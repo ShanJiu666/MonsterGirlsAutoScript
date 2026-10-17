@@ -63,6 +63,42 @@ SWIPE_UP_XY = (360, 200, 360, 900, 1200)      # 往**高**楼层
 SWIPE_DOWN_XY = (360, 900, 360, 200, 1200)    # 往**低**楼层
 FLOOR_SWIPES = 3                              # 从 2 楼到 4 楼实测要 3 次
 
+#: 「画面真的变了」的阈值（降采样灰度平均绝对差）
+#: 实测：面板挡着时的"假滑动" = 1.1~2.3；真滚动 = 27.8~79.6 ⇒ 取 15 余量充足 ✓
+SCROLL_MIN_DELTA = 15.0
+
+
+def _frame_sig(b):
+    """取当前帧的**降采样灰度指纹**（判"画面变没变"用）
+
+    ⚠ 必须走 `b.img()`（它内部按需 `snap`）——不要用 `b.ocr()` 的缓存帧，
+      那玩意儿不重抓，判据会读旧帧（本项目踩过 N 次）✗
+    """
+    try:
+        import numpy as _np
+        im = b.img()
+        if im is None:
+            return None
+        g = _np.asarray(im)
+        if g.ndim == 3:
+            g = g[:, :, :3].mean(axis=2)
+        return g[::8, ::8].astype('float32')       # 90×160，抗噪且快
+    except Exception:                              # noqa: BLE001
+        return None
+
+
+def _sig_delta(a, c):
+    """两个指纹的平均绝对差；任一为 None / 形状不符 ⇒ None（表示"测不出"）"""
+    if a is None or c is None:
+        return None
+    try:
+        import numpy as _np
+        if a.shape != c.shape:
+            return None
+        return float(_np.abs(a - c).mean())
+    except Exception:                              # noqa: BLE001
+        return None
+
 # ── 派遣任务（2 楼）──
 CHAIR_X = (263, 388, 513, 628)                # 4 把椅子的 x（间距 125）
 CHAIR_Y = 470
@@ -420,17 +456,48 @@ def scroll_to_top(b, log=None, times=None, max_swipes=8):
       ① 先**固定往上滚 N 次**（滚到滚不动为止，多滚无害 ✓）
       ② 再让 `_try_alchemy_chest` 用**一组候选点**去试开面板
          （它自带 x×y 容差，正是为这种"位置会漂"设计的 ✓）
+    ⭐⭐⭐⭐ 2026-10-17 **第五版补丁：滚完必须验证，且挡路面板要关**
+      真机事故：派遣做完后**悬赏详情面板没关** ⇒ 5 次滑动全滑在面板上
+        ⇒ 画面纹丝不动，可本函数**无条件 return True** ⇒ 撒谎 ✗
+        ⇒ 炼金 9 个候选点全点在面板的进度行上 ⇒ 报 `panel_not_opened` ✗✗
+      修法：滚前/滚后各取一帧指纹，差值 < `SCROLL_MIN_DELTA` 判"没滚动"
+        ⇒ 点 X 关掉面板（`close_panel` 自带验证）再试，两轮不行**如实 False** ✓
       ⛔ **不再**在滚的过程中试开面板 —— 那样太慢（每滚一次试 9 个点 = 分钟级）✗
         真机实测：那样跑 2 分钟都出不来，用户看不到进展 ✗
     ⚠ `times` 参数：默认 `FLOOR_SWIPES + 2`（从 2 楼到顶实测 2~3 次，
       多滚 2 次保证到底；顶楼再滚不动，无副作用 ✓）
     """
     n = int(times) if times is not None else (FLOOR_SWIPES + 2)
-    for _ in range(max(1, n)):
-        swipe_abs(*SWIPE_UP_XY)
-        time.sleep(0.9)
-    _log(log, {'guild': 'scroll_top', 'n': n})
-    return True
+    # ⭐⭐⭐⭐ 2026-10-17 **真机修：滚不动时不能撒谎**
+    #   原来无条件 `return True` ⇒ 卡在悬赏面板里也报"到顶了" ⇒ 炼金全程点空 ✗
+    #   现在：滚完**验证画面真的变了**；没变 ⇒ 关掉挡路的面板再试；仍不行 ⇒ 如实 False ✓
+    _unblocked = 0
+    for _attempt in range(3):
+        _before = _frame_sig(b)
+        for _ in range(max(1, n)):
+            swipe_abs(*SWIPE_UP_XY)
+            time.sleep(0.9)
+        _after = _frame_sig(b)
+        _d = _sig_delta(_before, _after)
+        _moved = (_d is None) or (_d >= SCROLL_MIN_DELTA)
+        _log(log, {'guild': 'scroll_top', 'n': n, 'attempt': _attempt,
+                   'delta': None if _d is None else round(_d, 1),
+                   'moved': _moved})
+        if _moved:
+            if _attempt:
+                say('   · 滚到高层了（关掉挡路面板后第 %d 次成功 ✓）' % _attempt)
+            return True
+        # ── 画面没变 ⇒ 十有八九是**面板挡着**（面板不滚动）──
+        say('   ⚠ 滚了 %d 次画面没变（差 %.1f < %.1f）⇒ 大概有面板挡着，先关掉'
+            % (n, _d if _d is not None else -1, SCROLL_MIN_DELTA))
+        # 派遣/悬赏详情面板的 X；`probe_texts` 用面板特征词验证真关掉了 ✓
+        close_panel(b, TASK_PANEL_X, 'scroll_unblock%d' % _attempt,
+                    probe_texts=('黑晶女仆',), log=log)
+        _unblocked += 1
+        time.sleep(0.8)
+    say('   ⚠ 滚不动（面板可能没关成功）⇒ **如实返回 False**（调用方据此放弃，别硬点）')
+    _log(log, {'guild': 'scroll_top_failed', 'unblocked': _unblocked})
+    return False
 
 
 def _try_alchemy_chest(b, log=None):
