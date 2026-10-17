@@ -24,7 +24,7 @@
 
 | 你想要的 | 在哪 |
 |---|---|
-| **源码 / 自己改** | 本仓库就是（跑 `python bot_gui.py`，需自装依赖） |
+| **源码 / 自己改** | 本仓库就是（跑 `python core/bot_gui.py`，需自装依赖） |
 | **exe 启动器** | `tools/launcher/MGAS.exe`（可以直接双击，但**周围没有 python311**，需要本机已装 Python 3.11 + 依赖） |
 | **重新编译 exe** | `python tools\launcher\build_launcher.py`（用系统自带 csc，零安装） |
 | **做一个能发给别人的整包** | `python tools\build_release_pkg.py` ⇒ 产出 `dist\MGAS-vX.Y-portable\` + `.zip`（这一步才会把 exe 复制到**包根**并内嵌 Python） |
@@ -121,7 +121,7 @@ python paths.py
 ### 4. 启动图形界面
 
 ```powershell
-python bot_gui.py
+python core/bot_gui.py
 ```
 
 选设备 → 勾选目标 → 点「开始」。
@@ -130,7 +130,7 @@ python bot_gui.py
 
 ```powershell
 # ⚠ 先只跑 1 张图验证，别一上来就挂机
-python explore_loop.py --device 127.0.0.1:16384 --maps 1 --deadline 180
+python core/explore_loop.py --device 127.0.0.1:16384 --maps 1 --deadline 180
 ```
 
 ---
@@ -139,7 +139,7 @@ python explore_loop.py --device 127.0.0.1:16384 --maps 1 --deadline 180
 
 ```powershell
 # 跑 5 张图，最多 10 分钟
-python explore_loop.py --device 127.0.0.1:16384 --maps 5 --deadline 600
+python core/explore_loop.py --device 127.0.0.1:16384 --maps 5 --deadline 600
 
 # 只看一帧的识别结果（不点任何东西，最安全的调试方式）
 python spots.py board runs/some_frame.png
@@ -217,17 +217,25 @@ OCR 只留给确实会变的内容（体力数字、倒计时、图名、道具�
 不依赖语料的核心自检：
 
 ```powershell
-python verify_gate.py
+python core/verify_gate.py
 ```
 
 ---
 
 ## 项目结构
 
-**仓根只放运行时模块、入口与必须项**（38 个文件，一眼能看完），其余都进子目录。
+**仓根只放说明文档、许可证和几个必须项**（9 个文件），**全部业务代码在 `core/`**。
 
 ```
-仓根（运行时）
+仓根（9 个文件）
+├── README.md              本文件
+├── DISCLAIMER.md          免责声明（用前必读）
+├── LICENSE                MIT（不覆盖游戏素材）
+├── .gitignore
+├── PC_VERSION             版本号
+└── requirements.txt       依赖清单
+
+core/（32 个 .py —— 全部业务代码）
 ├── explore_loop.py        主状态机（最核心）
 ├── bot_gui.py             tkinter 图形界面
 ├── mapbot.py              设备接口：截图 / 点击 / OCR / 等待
@@ -241,34 +249,37 @@ python verify_gate.py
 ├── buypanels.py           宝库 / 商人 / 石碑等面板流程
 ├── layout.py              版面锚点常量
 ├── targets_cfg.py         目标类型配置
-├── grid_detect.py / badge.py / cells.py    几何自检与角标识别
-├── paths.py / repo_paths.py                路径探测与环境体检
+├── grid_detect.py / badge.py              几何自检与角标识别
+├── paths.py / repo_paths.py               路径探测与环境体检
 ├── bootstrap.py / hotupdate.py / loopguard.py   启动、热更、看门狗
+├── fastcap.py / maa_sidecar.py            极速截图（MAA）通道
+├── mumu.py                                 MuMu 实例探测
 ├── fruit.py / recruit.py / guild_*.py      果实记录、招募、公会
-├── verify_gate.py         回归测试总入口
-├── requirements.txt / PC_VERSION           依赖与版本号
-├── run_bot.ps1 / collect_frames.bat        两个启动器
-├── README.md / LICENSE / DISCLAIMER.md / .gitignore
-│
-└── 子目录
-    ├── bot_gui_ui/        GUI 主题与控件
-    ├── templates/         识别模板与资源        ⚠ 见下
-    ├── data/              游戏数据表            ⚠ 见下
-    ├── tests/             各模块回归测试（74 个）
-    ├── devtools/          排障 / 取证 / 离线分析（58 个）
-    ├── tools/             打包工具
-    ├── docs/              使用说明书 / 算法 / 策略
-    └── _verify/           回归测试用的冻结帧
+└── verify_gate.py         回归测试总入口
+
+子目录
+├── bot_gui_ui/        GUI 主题与控件
+├── templates/         识别模板与资源        ⚠ 见下
+├── data/              游戏数据表            ⚠ 见下
+├── tests/             各模块回归测试（74 个）
+├── devtools/          排障 / 取证 / 离线分析（56 个）
+├── tools/             打包工具 + 两个备用启动脚本
+├── docs/              使用说明书 / 算法 / 策略
+└── _verify/           回归测试用的冻结帧
 ```
+
+> **为什么代码在 `core/` 而不是仓根？**
+> 根目录一眼能看完，`git clone` 下来不会先看到 30 个 `.py`。
+> 代价是跑命令要带前缀（`python core/bot_gui.py`），
+> 以及 `templates/` `runs/` `data/` 这些资源仍相对**仓根** —— 代码里用
+> `_MGAS_ROOT`（= `core/` 的上一级）区分这两层，别改成 `__file__` 目录 ✗
 
 | 目录 | 里面是什么 | 怎么用 |
 |---|---|---|
-| `tests/` | 回归测试（结构级 + 执行级 + 对照项） | `python verify_gate.py` 一次跑全套 |
+| `core/` | 全部业务代码 | `python core/bot_gui.py` 开界面 |
+| `tests/` | 回归测试（结构级 + 执行级 + 对照项） | `python core/verify_gate.py` 一次跑全套 |
 | `devtools/` | 排障与离线分析 | 按需单跑，如 `python devtools/see.py` |
 | `docs/` | 使用说明书 / 地图生成算法 / 策略说明 | 直接读 |
-
-判据都集中在**少数几个模块**里，且每个判据背后都写着它是被哪次真机事故逼出来的
-（在源码注释里搜「真机铁证」能看到全部）。
 
 ### 关于 `templates/` 与 `data/server_datatable.json`
 

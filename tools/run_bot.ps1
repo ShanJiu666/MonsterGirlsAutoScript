@@ -1,6 +1,8 @@
 <#
 幻想少女公会 · 自动探索 —— 启动器（纯本地，不需要 AI）
 
+位置：`tools/run_bot.ps1`（仓根已整理，启动脚本归到 tools/）
+
 用法（也可以直接双击）：
     右键本文件 → 使用 PowerShell 运行
     或：powershell -ExecutionPolicy Bypass -File run_bot.ps1
@@ -20,7 +22,10 @@ $ErrorActionPreference = 'Continue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# ⚠ 本脚本在 `tools/` 里（2026-10-17 目录整理）：**仓根 = 上一级**
+#   以下 `$Here` 一律指**仓根**（templates/ runs/ core/ 都相对它）
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Here = Split-Path -Parent $ScriptDir          # tools/ 的上一级 = 仓根
 Set-Location $Here
 
 # python：优先环境变量，其次仓内 .venv，最后 PATH
@@ -84,7 +89,7 @@ function Run-Bot([int]$Maps, [switch]$Quiet) {
     Write-Host "  日志：$log" -ForegroundColor DarkGray
     Write-Host "  ⚠ 跑的时候别在模拟器里手动点，会互相打架；要停就按 Ctrl+C" -ForegroundColor DarkYellow
     Write-Host ""
-    $botArgs = @('explore_loop.py', '--device', $DEV, '--max-round', '45',
+    $botArgs = @('core/explore_loop.py', '--device', $DEV, '--max-round', '45',
                  '--maps', "$Maps", '--deadline', '420')
     if ($Quiet) { $botArgs += '--no-dump' }
     & $PY @botArgs 2>&1 | Tee-Object -FilePath $log
