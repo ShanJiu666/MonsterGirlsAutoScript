@@ -139,11 +139,10 @@ _RE_MAPIDX = re.compile(r'第\s*(\d+)\s*张图')
 
 
 def _title_text(tag, device):
-    """窗口标题（只在**真有热更补丁**时才追加后缀）
+    """窗口标题：**带上当前生效的热更补丁**（用户 2026-10-03：「试试能不能」热更）
 
-    没有补丁 ⇒ 后缀是空串 ⇒ 标题就是 `幻想少女公会 · 自动探索（设备号）`。
-    ⚠ 注意拼法：空后缀时**不能**留下多余的 `'  '`（以前是
-      `base + '  ' + suffix`，后缀变空后标题尾部会挂两个空格 ✗）
+    ⇒ 一眼看出端上跑的到底是哪版代码：`... · 补丁 5bdb547f` / `· 出厂版`，
+      刚激活还没确认时会多一个「（待确认）」（约 3.5 秒后自动刷新掉 ✓）
     """
     base = '幻想少女公会 · 自动探索%s（%s）' % ('  [%s]' % tag if tag else '', device)
     try:
@@ -204,7 +203,7 @@ def choose_device(given=None, given_tag=''):
 
 # 极速截图 sidecar（MaaFw + MuMu 官方截图接口，跑在**独立 venv** 里）
 # ⭐⭐ 2026-10-02：统一走 `paths.find_maa_py()`，**不再各写一份路径**
-#   （`run_collect.py` 之前还写死着 `<原项目目录>\...`，两边不一致 ⇒
+#   （`run_collect.py` 之前还写死着 `D:\幻想少女公会\...`，两边不一致 ⇒
 #    一个能起 sidecar、另一个起不来，用户完全看不出差别）。
 #   ⛔ 之前这里虽然指向仓内 `_maa_venv`，但那个 venv **根本不存在** ⇒
 #      `ensure_sidecar()` 每次都**静默退回 adb**（0.33s/张，慢 25 倍），
@@ -708,7 +707,9 @@ class App:
     # ---------- 主控制卡（T6 §0 定稿：**一行** —— 左三按钮 + 右三选项）----------
     def _build_maincard(self):
         _p = ctk_theme.palette()
-        card = ctk.CTkFrame(self.stack.frame, corner_radius=12, fg_color=_p['card'])
+        # ⭐ 2026-10-18 方案 A：主控制卡同样加 **1px 描边**（卡底/窗口底只差 1.13:1 ✗）
+        card = ctk.CTkFrame(self.stack.frame, corner_radius=12, fg_color=_p['card'],
+                            border_width=1, border_color=_p['border'])
         # ⭐ 2026-10-13 复刻：主控制卡高 **58**（按钮 36 + 上下各 11）
         #   ⚠ 原来 `pady=PAD_CARD(12)` ⇒ 卡片 60；效果图是 58 ⇒ 内边距改 11 ✓
         #   ⚠ `pady=(0,0)`：效果图里顶栏与主控制卡**是紧贴的**（中间没有 6px 缝）✓
@@ -794,7 +795,7 @@ class App:
         #     与"补给"那颗**逐项同款**（用户 2026-10-12 口径：
         #       「勾选要是蓝的、字体颜色要和旁边的一样」）⇒ 同 20px / 同圆角 5 /
         #       fg=主色 / hover=主色深 / 字=正文灰 ✓
-        self.tasks_var = tk.BooleanVar(value=True)     # ⭐ 2026-10-17 用户口径：默认勾上（公会日常）
+        self.tasks_var = tk.BooleanVar(value=False)
         self.tasks_ck = ctk.CTkCheckBox(
             bar2, text='公会日常', variable=self.tasks_var,
             font=ctk_theme.font(ctk_theme.FS_BODY), checkbox_width=20,
@@ -819,7 +820,7 @@ class App:
         #     ③ 那颗按钮**只在勾选时可用**（不勾就是灰的）
         #        —— 用户口径"可以勾选可以立即运行"= 勾了才能立即跑 ✓
         #        ⚠ 理由：招募会**消耗当天那次免费机会** ⇒ 必须显式勾选授权 ✓
-        self.recruit_var = tk.BooleanVar(value=True)     # ⭐ 2026-10-17 用户口径：默认勾上（免费招募）
+        self.recruit_var = tk.BooleanVar(value=False)
         self.recruit_ck = ctk.CTkCheckBox(
             bar2, text='免费招募', variable=self.recruit_var,
             font=ctk_theme.font(ctk_theme.FS_BODY), checkbox_width=20,
@@ -916,7 +917,7 @@ class App:
                 self._bag_entry.bind(_seq, lambda _e=None: self.save_bag_every())
             except Exception:       # noqa: BLE001
                 pass
-        ctk.CTkLabel(bar2, text='张图升星装备（0=关）', text_color=_p['text'],
+        ctk.CTkLabel(bar2, text='张图升星（0=关）', text_color=_p['text'],
                      font=ctk_theme.font(ctk_theme.FS_BODY)).pack(
             side='left', padx=(2, theme.PAD_GAP * 2))
         # ⭐ 2026-09-27 用户要求：「连刷也存图吧，加个按钮开启存图模式」
@@ -1045,7 +1046,9 @@ class App:
         mid.grid_columnconfigure(0, minsize=theme.LEFT_CARD_W)
         mid.grid_rowconfigure(0, weight=1)
 
-        left = ctk.CTkFrame(mid, corner_radius=12, fg_color=_p['card'])
+        # ⭐ 2026-10-18 方案 A：中栏两卡同样加 **1px 描边**（卡片才浮得起来 ✓）
+        left = ctk.CTkFrame(mid, corner_radius=12, fg_color=_p['card'],
+                            border_width=1, border_color=_p['border'])
         left.grid(row=0, column=0, sticky='nsew')
         # ⭐⭐ 2026-10-13 P1-b（工单 07 §3）：棋盘卡标题行**右侧**加图名（如「夏日海滩」）
         #   ⚠ 数据**早就有**：`self.looplog.mapname`（`_update_board` 里已用它判换图解冻）
@@ -1091,7 +1094,8 @@ class App:
                          '进图 ~1 秒先落一次快照（board_snapshot），'
                          '之后每张图退图后再全量刷新')
 
-        right = ctk.CTkFrame(mid, corner_radius=12, fg_color=_p['card'])
+        right = ctk.CTkFrame(mid, corner_radius=12, fg_color=_p['card'],
+                             border_width=1, border_color=_p['border'])
         right.grid(row=0, column=1, sticky='nsew', padx=(theme.PAD_GAP, 0))
         ctk.CTkLabel(right, text='当前状态', text_color=_p['text'],
                      height=theme.LBL_H_SUB,
@@ -1105,12 +1109,23 @@ class App:
                                      font=ctk_theme.font(ctk_theme.FS_TITLE),
                                      wraplength=640, justify='left', anchor='w')
         self.line_lab.pack(fill='x', padx=theme.PAD_CARD)
+        # ⭐⭐ 2026-10-18 方案 C「状态卡重构」：**计划楎 → 步骤胶囊**
+        #   ── 病：原来是一整串 mono 长串
+        #     `计划：cost=13 ｜ 5 步（首帧） ｜ 1,7→3,5→3,4→3,1→4,2`
+        #     ⇒ 要在脑子里把坐标对回格名才知道去哪几格 ✗
+        #   ── 修法：保留 `plan_var`（门禁 ⑩/⑯ 钉着它必须存在）作为**模型层口径**，
+        #     再在下面加一排**步骤胶囊**（序号圆 + 格名）✓
+        #   ⚠ 胶囊区见 `_plan_chips`（由 `_update_board` 每次重绘）
         self.plan_var = tk.StringVar(value='计划：—')
         self.plan_lab = ctk.CTkLabel(right, textvariable=self.plan_var,
-                                     text_color=_p['text'], height=18,
+                                     text_color=_p['dim'], height=18,
                                      font=ctk_theme.font(ctk_theme.FS_MONO_SUB),
                                      wraplength=640, justify='left', anchor='w')
         self.plan_lab.pack(fill='x', padx=theme.PAD_CARD, pady=(2, 0))
+        # ⭐ 步骤胶囊容器（空壳；内容由 `_plan_chips()` 每图重建 ✓）
+        self.chipwrap = ctk.CTkFrame(right, fg_color='transparent', corner_radius=0,
+                                     height=24)
+        self.chipwrap.pack(fill='x', padx=theme.PAD_CARD, pady=(3, 0))
         # ⭐ 进度行（`[rN] 标记格 …`）—— 与计划同一块"坐标数据"，实时更新 ✓
         self.prog_var = tk.StringVar(value='进度：—')
         self.prog_lab = ctk.CTkLabel(right, textvariable=self.prog_var,
@@ -1231,18 +1246,7 @@ class App:
         """
         var = getattr(self, var_name, None)
         if var is None:                     # ⚠ 只有第一次才新建
-            # ⭐⭐ 2026-10-17 用户口径（原话）：
-            #   「预言石碑，只默认勾选**幸运**和**元素橙**」
-            # ⇒ 不再是"全部默认真"一刀切，而是按名字白名单。
-            # ⚠ 这两个 var 只在 GUI 侧存在（值是"初始勾选状态"）；
-            #   `explore_loop.STOP_ELEM_*` 那组**模块级默认**是"无 GUI 时"的
-            #   兜底口径，**不受这里影响**，也别去改它（门禁 `verify_elem_stop`
-            #   ① ② 钉着它，且命令行用户依赖它）✓
-            # 兜底值与 `_load_stop_prefs` 的 `_STOP_DEFAULT` **同一真相源**
-            # ⚠ 正常流程里 `_load_stop_prefs` 立刻会 `.set()` 覆盖它 ⇒ 这里只防
-            #   "某条路径跳过了 load"时框是空的
-            _which = var_name.replace('stop_', '').replace('_var', '')
-            var = tk.BooleanVar(value=bool(self._STOP_DEFAULT.get(_which, False)))
+            var = tk.BooleanVar(value=True)
             setattr(self, var_name, var)
         _p = ctk_theme.palette()
         return ctk.CTkCheckBox(parent, text=text, variable=var,
@@ -1481,6 +1485,9 @@ class App:
         self.txt.tag_configure('bad', foreground=theme.C_DANGER, font=(theme.F_MONO, 9, 'bold'))
         self.txt.tag_configure('head', foreground=theme.C_TEXT, font=(theme.F_MONO, 9, 'bold'))
         self.txt.tag_configure('dim', foreground=theme.C_TEXT_DIM, font=(theme.F_MONO, 9))
+        # ⭐ 2026-10-18 方案 A：`strong` = 日志里原本 `**…**` 的那段（加粗、不再显示星号 ✓）
+        #   ⚠ 这个 tag 必须在 `log()` 之前存在（建窗顺序：`_build_tab_log` 早于任何 log 调用 ✓）
+        self.txt.tag_configure('strong', foreground=theme.C_TEXT, font=(theme.F_MONO, 9, 'bold'))
 
     def _build_tab_special(self):
         """特殊方块页签：**按 `DISPLAY_ORDER` 固定顺序**、**分两组**、每项带说明 ⓘ ✓
@@ -1785,6 +1792,8 @@ class App:
             self.txt.tag_configure('bad', foreground=_p['danger'])
             self.txt.tag_configure('head', foreground=_p['text'])
             self.txt.tag_configure('dim', foreground=_p['dim'])
+            # ⭐ 2026-10-18 方案 A：切主题时 `strong` 也要跟着换色（tk 控件无主题机制 ✗）
+            self.txt.tag_configure('strong', foreground=_p['text'])
         except Exception:       # noqa: BLE001
             pass
         # ①b ⭐⭐ 2026-10-12 用户：「**日志的滚动条也是**（深色下不对）」
@@ -1901,7 +1910,26 @@ class App:
             return
         try:
             self.txt.configure(state='normal')
-            self.txt.insert('end', line + '\n', self._tag_of(line))
+            # ⭐⭐ 2026-10-18 方案 A：**日志里不再出现字面 `**`**
+            #   ── 病（实测）：`self.log()`/`_Tip()` 里共 **15 处**带 Markdown 粗体标记，
+            #     而日志框是 `ScrolledText`（不认 Markdown）⇒ 屏幕上就是字面的
+            #     `**进图首帧**`，等宽字体下非常显眼 ✗
+            #   ── 修法：按 `**` 切段，**奇数段用 `strong` tag 加粗**、不插星号
+            #     （标记仍在——只是从字面变成了加粗，语义一字不变 ✓）
+            #   ⚠ 没有 `**` 的行**走原路径**（一次 split 的代价，不改行为）
+            _parts = line.split('**')
+            if len(_parts) > 1:
+                _tg = self._tag_of(line)
+                for _i, _seg in enumerate(_parts):
+                    if not _seg:
+                        continue
+                    if _i % 2:
+                        self.txt.insert('end', _seg, ((_tg,) if _tg else ()) + ('strong',))
+                    else:
+                        self.txt.insert('end', _seg, _tg)
+                self.txt.insert('end', '\n', _tg)
+            else:
+                self.txt.insert('end', line + '\n', self._tag_of(line))
             self.txt.see('end')
             self.txt.configure(state='disabled')
         except Exception:           # noqa: BLE001
@@ -1967,7 +1995,30 @@ class App:
         except Exception:       # noqa: BLE001
             line = ''
         try:
-            self.hotlab.configure(text=line[:120])
+            # ⭐⭐ 2026-10-18 方案 B「顶栏净化」：**顶栏不再显示包路径/补丁号**
+            #   ── 病：`包 v1.0 · 补丁=无 · 包目录=D:\MGAS\mapbot_pc` 占 **251px**
+            #     （左边标题才 232px）⇒ 日常用不上，长实例名时更挤 ✗
+            #   ── 修法：改成**只在「关于 / 更新」页签里完整显示**（见 `_build_tab_about`），
+            #     顶栏只留**极简版**：有补丁才说补丁（否则留空 ✓）
+            #   ⚠ 不删控件、不改名：`hotlab` 仍存在（其他地方可能引用）
+            _short = ''
+            try:
+                # ⚠ 用 `applied()`（已封装、返回 `''` 表示无补丁），
+                #   **不要**直接读 `load_state()`（那个名字不存在 ✗）
+                _pid = self.hot.applied() or ''
+                if _pid:
+                    _short = '补丁 ' + _pid.split('-')[-1][:8]
+            except Exception:       # noqa: BLE001
+                _short = ''
+            self.hotlab.configure(text=_short)
+            # ⭐ 方案 B：**完整的版本/补丁/包目录下沉到「关于 / 更新」页签**
+            #   ── 那份完整信息 `_refresh_about()` **本来就有**（版本/热更状态/补丁/
+            #     启动次数/回滚/包目录 6 行）⇒ **直接调它**，不另写一份 ✗
+            #   ⚠⚠ **必须容错**：`_refresh_hot_labels()` 在 `_build_topbar` 里就被调
+            #     （L690），而「关于」页签要到 `_build_tabs` 才建 ⇒ 那时
+            #     `about_var` **还不存在** ⇒ 不能硬调（否则建窗就崩 ✗）
+            if getattr(self, 'about_var', None) is not None:
+                self._refresh_about()
         except Exception:       # noqa: BLE001
             pass
 
@@ -2109,6 +2160,64 @@ class App:
         except Exception:       # noqa: BLE001  （捡信息绝不能把泵搞死）
             pass
 
+    def _plan_chips(self, order=None, cost=None, board=None):
+        """⭐ 2026-10-18 方案 C：把计划画成**步骤胶囊**（序号圆 + 格名）
+
+        ── 为什么
+          原来只有一行 mono 长串：`计划：cost=13 ｜ 5 步（首帧） ｜ 1,7→3,5→…`
+          ⇒ 用户要在脑子里把 `1,7` 对回「阴暗古墓」才知道去哪几格 ✗
+          而坐标与格名的对应关系 **`looplog.last_board` 里本来就有**
+          （`{"1,7": [sid, 格名, score, ratio]}）⇒ 零新数据源 ✓
+
+        ── 为什么和棋盘序号同款
+          棋盘上的计划圈也是 1,2,3… ⇒ 两处**同一套视觉语言**，
+          一眼就能对上「第 3 步去哪」（用户 2026-10-11 要的“执行图”延伸 ✓）
+
+        ⚠ 任何坏数据都**不抛**（GUI 跑在 pythonw 无控制台 ✗）
+        ⚠ `order` 空 ⇒ **整块隐藏**（不留一排空壳占高度 ✗）
+        """
+        try:
+            wrap = getattr(self, 'chipwrap', None)
+            if wrap is None:
+                return
+            for _c in wrap.winfo_children():
+                _c.destroy()
+            _ord = [str(x) for x in (order or []) if str(x or '').strip()]
+            if not _ord:
+                wrap.pack_forget()
+                return
+            wrap.pack(fill='x', padx=theme.PAD_CARD, pady=(3, 0), after=self.plan_lab)
+            _p = ctk_theme.palette()
+            _bd = board or {}
+            # 首格先算一个总说明（cost / 步数）
+            _meta = ('cost %s · %d 步'
+                     % (cost if cost not in (None, '') else '—', len(_ord)))
+            ctk.CTkLabel(wrap, text=_meta, text_color=_p['dim'], height=17,
+                         anchor='w', font=ctk_theme.font(ctk_theme.FS_HINT)
+                         ).pack(side='left', padx=(0, 8))
+            for _i, _cell in enumerate(_ord):
+                _rec = _bd.get(_cell) or []
+                _nm = str(_rec[1]) if len(_rec) > 1 else _cell
+                _short = _nm if len(_nm) <= 4 else _nm[:3] + '…'
+                _chip = ctk.CTkFrame(wrap, fg_color=_p['card2'], corner_radius=7,
+                                     border_width=1, border_color=_p['border'])
+                _chip.pack(side='left', padx=(0, 5))
+                ctk.CTkLabel(_chip, text=str(_i + 1), width=17, height=17,
+                             corner_radius=9, fg_color=_p['primary_btn'],
+                             text_color='#FFFFFF',
+                             font=ctk_theme.font(ctk_theme.FS_HINT)
+                             ).pack(side='left', padx=(4, 0), pady=3)
+                ctk.CTkLabel(_chip, text=_short, height=17,
+                             text_color=_p['text'],
+                             font=ctk_theme.font(ctk_theme.FS_SUB)
+                             ).pack(side='left', padx=(4, 7))
+                # 悬浮提示给完整格名 + 坐标（字被截了也能看到 ✓）
+                try:
+                    _Tip(_chip, '%d. %s（%s）' % (_i + 1, _nm, _cell))
+                except Exception:       # noqa: BLE001
+                    pass
+        except Exception:           # noqa: BLE001
+            pass
     def _paint_plan(self):
         """把当前计划刷进「计划」行 + 棋盘序号（**只重画棋盘，不重读文件** ✓）"""
         try:
@@ -2216,15 +2325,7 @@ class App:
             self.looplog.poll()
             _err = (getattr(self.summary, 'last_error', '')
                     or getattr(self.looplog, 'last_error', ''))
-            # ⚠ 区分两种"读不到"（以前一律报「读取失败」，首次启动就吓人 ✗）：
-            #   ① **文件还不存在**（从没跑过 / 刚解压）⇒ 正常现象，
-            #      面板自然显示「—」，跑完第一张图就有了 ⇒ **不提示**
-            #   ② **文件在、但读坏了**（撞上整体覆写的半截）⇒ 才值得提醒一次
-            _missing = _err and ('文件不存在' in str(_err)
-                                 or 'No such file' in str(_err))
-            if _missing:
-                self._stale_warned = False
-            elif _err and not getattr(self, '_stale_warned', False):
+            if _err and not getattr(self, '_stale_warned', False):
                 self._stale_warned = True
                 self.log('⚠ 数据面板：最近一次读取失败（%s…）⇒ 先显示**上一次的好值**'
                          '（数据文件是整体覆写，轮询撞上半截属正常；读到新的会自动恢复 ✓）'
@@ -2687,6 +2788,15 @@ class App:
                    else '—', len(order),
                    ('（%s）' % src) if src else '',
                    '→'.join(order[:8]) + ('…' if len(order) > 8 else '') or '—'))
+        # ⭐⭐ 2026-10-18 方案 C：**同一份计划再画一排步骤胶囊**
+        #   ── 数据**完全复用上面那份** `plan`/`order`/`board`（零新数据源 ✓）
+        #   ── ⚠⚠ **必须在 `plan_var` 设完之后**：门禁 ⑩ 钉着 `plan_var` 仍存在且有值
+        #     （它是“只删该删的”那条反向守门）⇒ 不能把它换成胶囊 ✗
+        #   ── ⚠ 异常吞掉：胶囊画不出来**不能让整盘棋盘也挂掉** ✗
+        try:
+            self._plan_chips(order, (plan or {}).get('cost'), board)
+        except Exception:           # noqa: BLE001
+            pass
         # 状态句：子进程 stdout 里带 `› ` 前缀的行（`explore_loop.status()` ✓）
         self.line_var.set(getattr(self, '_last_status_line', None) or '› 就绪，等开跑')
 
@@ -3367,36 +3477,25 @@ class App:
             return None
 
     def _load_recruit_pref(self):
-        """读回「免费招募」勾选
-
-        ⭐ 2026-10-17 用户口径：**默认勾上**（原话「解压后默认勾选不对」+
-          上轮选的「功能开关：公会日常 / 免费招募」）
-        ⇒ 读不到配置时落到 `True`；**已配置过的仍以配置为准** ✓
-        ⚠ 它仍会消耗当天那次免费机会 —— 只是"默认帮用户开好"，用户随时能取消。
-        """
+        """读回「免费招募」勾选（**读不到 ⇒ 关** ✓ 它会消耗当天那次免费机会）"""
         try:
-            v = self.prefs.load_recruit(True)
+            v = self.prefs.load_recruit(False)
         except Exception:       # noqa: BLE001
-            v = True
+            v = False
         self.recruit_var.set(bool(v))
         self._sync_recruit_btn()
         if v:
-            self.log('（免费招募：开 —— 默认开启；「立即招募」可点 ✓）')
+            self.log('（已记住：免费招募 开 —— 「立即招募」可点 ✓）')
 
     def _load_tasks_pref(self):
-        """读回「公会日常」勾选（派遣 + 炼金）
-
-        ⭐ 2026-10-17 用户口径：**默认勾上**（同上）。
-        ⚠ 仍要提示炼金会消耗 6 件 5★ 满星装备（不可逆）—— 用户明确要默认开，
-          但每次开窗的日志里都会写明代价，不静默 ✓
-        """
+        """读回「派遣任务」勾选（**读不到 ⇒ 关** ✓ 别偷偷改游戏状态）"""
         try:
-            v = self.prefs.load_guild_tasks(True)
+            v = self.prefs.load_guild_tasks(False)
         except Exception:       # noqa: BLE001
-            v = True
+            v = False
         self.tasks_var.set(bool(v))
         if v:
-            self.log('（公会日常：开 —— 默认开启，派遣+炼金都做；'
+            self.log('（已记住：公会日常 开 —— 派遣+炼金都做；'
                      '⚠ 炼金会消耗 6 件 5★ 满星装备）')
 
     def _load_alchemy_pref(self):
@@ -3472,14 +3571,13 @@ class App:
                      'peace': False, 'elem_purple': False}
 
     def _load_stop_prefs(self):
-        """按 `_STOP_DEFAULT` 恢复各停止开关（**读不到配置才用出厂默认** ✓）"""
+        """默认 **开**（用户要的就是"遇到就停"）；读不到也当开 ✓"""
         for which, var, label in (('lucky', self.stop_lucky_var, '幸运(宝箱→四叶草)'),
                                   ('peace', self.stop_peace_var, '和平·金属宝箱怪'),
                                   # ⭐ 2026-10-09 用户：「预言石碑停止脚本加上橙色和紫色元素」
                                   ('elem_purple', self.stop_elem_purple_var, '元素·紫色'),
                                   ('elem_orange', self.stop_elem_orange_var, '元素·橙色')):
-            v = self.prefs.load_stop(which,
-                                     default=self._STOP_DEFAULT.get(which, False))
+            v = self.prefs.load_stop(which, default=True)
             try:
                 var.set(v)
             except Exception:       # noqa: BLE001
@@ -3529,7 +3627,7 @@ class App:
         """启动时自动显示「本窗口绑的是 MuMu 哪个实例」（用户 2026-09-25：写成实例名就能分辨）
 
         实例名 ↔ adb 端口来自 MuMu 自带的 `MuMuManager.exe info -v all`（见 mumu.py）：
-        不用截图、不用 OCR，`127.0.0.1:16416` → 「实例B（安卓15.0，运行中）」。
+        不用截图、不用 OCR，`127.0.0.1:16416` → 「幻少（安卓15.0，运行中）」。
         MuMuManager 偶尔第一次查不到（服务还没起好）→ 自动重试一次。
         ⚠ 老代码这里还有一句 `self.root.title(...)` —— 它会**覆写掉标题里的热更信息** ✗（P8）；
           现在设备名只写顶栏标签，**标题归 `_title_text` 独占** ✓
@@ -3557,7 +3655,9 @@ class App:
                      '上次回滚：%s' % (st.get('rolledBack') or '无'),
                      '包目录：%s' % HERE]
             self.about_var.set('\n'.join(lines))
-            self.hotlab.configure(text=self.hot.status_line()[:120])
+            # ⭐ 2026-10-18 方案 B：**不再把长串回填顶栏**（否则刷新一次就打回原形 ✗）
+            #   顶栏那一格由 `_refresh_hot_labels()` 统一管（只显示极简补丁号）✓
+            #   完整信息就在**上面那 6 行** `about_var` 里 ✓
         except Exception as e:      # noqa: BLE001
             try:
                 self.about_var.set('（热更状态读取失败：%r）' % (e,))

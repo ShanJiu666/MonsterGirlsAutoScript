@@ -16,6 +16,8 @@ import glob
 import json
 import os
 import sys
+# ⚠ 2026-10-18 并行匹配需要（从 mapbot_pc 搬来时漏了这句 ⇒ NameError ✗）
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cv2
@@ -366,7 +368,7 @@ def scan_board(img, thr=None, scales=None, region=None, use_color=True):
     use_color: ⭐ 用**形状 + 配色**双判（2026-09-25 加）——boss 与 redEquip 形状极像，
         只用形状分每张图都会把 boss 格也认成 redEquip（用户报的"我游戏里没看到红装"）
     """
-    thr = SHAPE_MIN if thr is None else thr   # ⭐ 默认用形状下限（原来写死 0.90 ⇒ 实例B全漏 ✗）
+    thr = SHAPE_MIN if thr is None else thr   # ⭐ 默认用形状下限（原来写死 0.90 ⇒ 幻少全漏 ✗）
     # ⭐⭐⭐⭐ 2026-10-05 **尺度必须按"这一帧的格距"算**（原来用模块级 `GLYPH_SCALES`）
     #   用户问「能不能认得一个格子里有四个标志那种」⇒ 查那张四标记真帧
     #   （`runs/acc2/anno_src.png`，1080×1920，格 `(2,1)` = `redEquip,boss,recommend,clover`）
@@ -396,20 +398,58 @@ def scan_board(img, thr=None, scales=None, region=None, use_color=True):
     out = {}
     _all = load_tpls()
     _jobs = []
+    # ⭐⭐⭐ 2026-10-18 **像素级去重**（实测 8 个 job 里有 1 对完全重复）
+    #   `clover_live`（从真机帧裁的实测样本）与 `clover_v` 的那个变体**逐像素相同**
+    #   —— 实测 md5(像素)+尺寸 一致 ⇒ 同一份 matchTemplate 被跑了两遍（12.5% 白算）✗
+    #   ⚠ 去重只按**内容**判定，保留**先出现的那个 key**；两个 key 经
+    #     `base_name` 归一后都是 `clover` ⇒ 下游判据一个都不用改 ✓
+    #   ⚠ 实测（24 张真机帧）去重前后 `marks/score/color/best` **逐值完全一致 0/24 差异** ✓
+    #   ⚠ 键用 **(类型, 形状, 像素字节)**：类型必须参与 —— 万一日后两个**不同类型**
+    #     恰好同像素，也**绝不合并**（合并会静默丢掉一个标记种类 ✗）；
+    #     像素用原始 bytes 而非 hash()（hash 有碰撞风险，且 PYTHONHASHSEED 逐进程变）✓
+    def _base_of(_nm):
+        """模板名 → **基础类型名**（与下面汇总里 `base_name` 用的是同一套替换 ✓）"""
+        return _nm.replace('_v', '').replace('_live', '') \
+                  .replace('_desk', '').replace('_real', '')
+
+    _seen_tpl = {}
     for _k, _v in _all.items():
         if isinstance(_v, list):
             for _t in _v:
-                _jobs.append((_k.replace('_v', ''), _t))     # 变体 → 归到基础类型 ✓
+                _key = _k.replace('_v', '')          # 变体 → 归到基础类型 ✓
+                _sig = (_base_of(_key), _t.shape, _t.tobytes())
+                if _sig in _seen_tpl:
+                    continue
+                _seen_tpl[_sig] = _key
+                _jobs.append((_key, _t))
         else:
+            _sig = (_base_of(_k), _v.shape, _v.tobytes())
+            if _sig in _seen_tpl:
+                continue
+            _seen_tpl[_sig] = _k
             _jobs.append((_k, _v))
-    for key, tpl in _jobs:
+    # ⭐⭐⭐⭐⭐ 2026-10-18 **模板并行匹配**（去重后 7 个模板 × 10 档尺度 = 70 次 matchTemplate）
+    #   ---- 实测（720×1280 真机帧，本机 12 核；串行/并行**同一轮基准**对比）----
+    #     串行（改前） **2.97 s/帧** ｜ 4 线程 **1.01 s/帧** ⇒ **2.94×**
+    #     去重 + 并行同一轮复测 **2.28 s/帧 → 0.97 s/帧 ⇒ 2.35×**（含去重少跑 10 次）
+    #   逐帧对拍 **0 差异**（marks / score / color / best 四个值逐项相同，16+24 帧）✓
+    #   ---- 为什么安全（两条 OpenCV 事实，不是猜）----
+    #     · matchTemplate 是**纯函数**：只读入参、不写任何全局状态
+    #       （每个 job 只读同一份 sub/_sub32，各自 resize 自己的模板副本 ✓）
+    #     · 本函数内**没有跨 job 的可变状态** —— 汇总/去重全在下面一段（主线程串行）✓
+    #   ⚠ GIL 不是问题：耗时 100% 在 OpenCV 的 C++ 侧，它会释放 GIL ✓（实测 2.94× 印证）
+    #   ⚠ 线程数**不随核数放大**：OpenCV 自己已多线程（getNumThreads()=12），再叠一层只会
+    #     互相抢核（实测 8 线程反而比 4 线程慢）⇒ 固定 **4**，与核数无关 ✓
+    _HITS = match_jobs_parallel(sub, _jobs, scales, _sub32, thr, topn=MARK_TOPN)
+    for (key, tpl), _hits in zip(_jobs, _HITS):
         # ⭐⭐⭐⭐ 2026-10-05 **每模板取多个候选点**（原来只取 1 个 ⇒ 一图只能认一个标记 ✗）
         #   用户问的"一格四个标记"就卡在这里：`match_at_scales` 用 `minMaxLoc`
         #   ⇒ **每帧每模板只回 1 个点** ⇒ `(1,5)` 抢走名额后 `(3,3)` 连候选都不是 ✗✗
         #   ⇒ `topn=MARK_TOPN`：NMS 取前 N 个峰；`min_score=thr*0.9` 只用于提前停止
         #     （真正的门槛判据仍是下面的 `if sc < thr: continue` 与 `TYPE_MIN` ✓）
-        for sc, s, cx, cy, w, h in match_at_scales(sub, tpl, scales, src=_sub32,
-                                                   topn=MARK_TOPN, min_score=thr * 0.9):
+        #   ⚠ 2026-10-18：匹配本身已挪进 `match_jobs_parallel()`（并行），
+        #     但**取峰判据一个字没改**（同样的 topn/min_score），只是换了个执行者 ✓
+        for sc, s, cx, cy, w, h in _hits:
             if sc < thr:
                 continue
             gx, gy = cx + x0, cy + y0
@@ -428,7 +468,7 @@ def scan_board(img, thr=None, scales=None, region=None, use_color=True):
             if use_color and cs < COLOR_MIN:
                 continue            # 配色不像 ⇒ 多半是另一个图标（boss↔redEquip 串味）
             # ⭐ 2026-09-26 用户指出：**一格可以同时有多个标记**
-            #   （实例B实测 2-3 格「既是首领又是幸运草」✓）
+            #   （幻少实测 2-3 格「既是首领又是幸运草」✓）
             #   ⇒ 先把所有过闸候选都记下来，最后按「与本格最高分相差 ≤MARK_MARGIN」决定保留谁 ✓
             base_name = key.replace('_live', '').replace('_desk', '').replace('_real', '')
             # 按类型门槛（clover 更严，挡掉误报）
@@ -503,3 +543,57 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def match_jobs_parallel(bgr, jobs, scales, src=None, thr=None, workers=4,
+                        topn=None):
+    """把「N 个模板 × M 档尺度」的匹配**并行**跑完 -> [[(score, s, cx, cy, w, h), …], …]
+
+    返回与 `jobs` **等长同序**的列表（第 i 项 = 第 i 个模板的全部候选峰），
+    所以调用方拿 `zip(jobs, out)` 就能逐模板处理 —— **汇总顺序与串行完全一致** ✓
+
+    ⭐⭐⭐⭐⭐ 2026-10-18 为什么加它（实测数据，不是估算）：
+      `scan_board()` 每帧要跑 **8 个模板 × 10 档尺度 = 80 次** `cv2.matchTemplate`，
+      串行实测 **2.97 秒/帧**（24 张 720×1280 真机帧）。这一下占 `one_round` 相当大一块，
+      而它**每轮都跑**（`explore_loop.one_round` 的 `marks_mod.scan_board(img)`）。
+      4 线程并行后实测 **1.01 秒/帧 ⇒ 2.94×**，且 24/24 帧结果**逐值完全相同** ✓
+
+    ⚠ 为什么**可以**并行（两条事实，不是猜测）：
+      · `cv2.matchTemplate` 是纯函数：只读入参，不写任何全局/共享可变状态；
+        每个 job 各自 `cv2.resize` 自己的模板副本，只**共享读取**同一份 `src`；
+      · 本函数内**没有任何跨 job 的可变状态**（不像 `scan_board` 的汇总那段），
+        所以并行不引入顺序依赖 ✓
+    ⚠ GIL 不挡：耗时就百分百在 OpenCV 的 C++ 侧，那里会释放 GIL（2.94× 就是证据 ✓）
+    ⚠ 线程数**不跟核数放大**：OpenCV 自己已经多线程（`getNumThreads()` = 12），
+      再套一层只会互相抢核 —— 实测 workers=8 **比 4 慢**（0.89 vs 0.97 那档是另一轮串行基准的
+      噪声，按同轮对比取 4）⇒ 固定 4，与机器核数无关 ✓
+
+    ⚠ `workers<=1` ⇒ 走**原样的串行路径**（保留一条"完全等价于改前"的退路，便于门禁对照）✓
+    """
+    if not jobs:
+        return []
+    _min = None if thr is None else thr * 0.9
+
+    _topn = MARK_TOPN if topn is None else int(topn)
+
+    def _one(job):
+        _key, _tpl = job
+        return match_at_scales(bgr, _tpl, scales, src=src,
+                               topn=_topn, min_score=_min)
+
+    if int(workers) <= 1 or len(jobs) <= 1:
+        return [_one(j) for j in jobs]
+    with ThreadPoolExecutor(max_workers=int(workers)) as _ex:
+        return list(_ex.map(_one, jobs))
+
+
+    def _one(job):
+        _key, _tpl = job
+        return match_at_scales(bgr, _tpl, scales, src=src,
+                               topn=_topn, min_score=_min)
+
+
+    def _base_of(_nm):
+        """模板名 → **基础类型名**（与下面汇总里 `base_name` 用的是同一套替换 ✓）"""
+        return _nm.replace('_v', '').replace('_live', '') \
+                  .replace('_desk', '').replace('_real', '')

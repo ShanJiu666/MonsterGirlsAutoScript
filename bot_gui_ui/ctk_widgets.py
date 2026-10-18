@@ -45,8 +45,13 @@ class CtkCard(ctk.CTkFrame):
           ⇒ 现在全窗单一族（`FS_*` 的 `_FONT = 'Microsoft YaHei UI'`）✓
         """
         _p = C.palette()            # ⚠ **不给 mode** ⇒ 双色元组（ctk 自动跟随主题 ✓）
+        # ⭐⭐ 2026-10-18 方案 A「视觉层次精修」：卡片**加 1px 描边**
+        #   实测病：卡底 `#FFFFFF` 与窗口底 `#F0F1F3` 对比度只有 **1.13:1**
+        #     （深色 `#2B2D31` vs `#1E1F22` = 1.195:1）⇒ 卡片边界全靠圆角形状去猜 ✗
+        #   ⇒ `border_width` 0 → **1**，色走 `palette()['border']`（双色元组 ⇒ 切主题自动跟 ✓）
+        #   ⚠ 不占布局高度：ctk 的 border 画在圆角框内，`DASH_H`(78) 不变 ✓
         super().__init__(master, corner_radius=12, fg_color=_p['card'],
-                         border_width=0)
+                         border_width=1, border_color=_p['border'])
         self._big = bool(big)
         self._num_spec = C.FS_NUM_BIG if self._big else C.FS_NUM
         # ⭐⭐ 2026-10-13 「手绘效果图 1:1 复刻」（docs/09）：**三行高度必须显式给**

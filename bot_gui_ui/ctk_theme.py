@@ -2,7 +2,7 @@
 """bot_gui_ui.ctk_theme · customtkinter **双主题**色板 + 外观模式（T6 新建 · 与 `theme.py` 并存）
 
 出处（先读再改；⚠ **浅色值不许自己发明**）：
-    · UI 执行工单 **§T6 §Step 1**（= 本文件的存在理由）——
+    · `D:/MGAS/docs/06-PC端UI执行工单.md` **§T6 §Step 1**（= 本文件的存在理由）——
       「主题层 `bot_gui_ui/ctk_theme.py`（新建）：双套色板（浅色/深色，对应 demo 的 `P` dict）
       ＋ `apply(mode)`（`ctk.set_appearance_mode`）＋ `current()` 读当前模式
       ＋ **持久化到 `runs/.ui_theme`**（'light'/'dark'，启动时读 ⇒ 记住用户选择）；
@@ -23,7 +23,7 @@
       （正文/主色字/棋盘文字 on 深底）**≥4.5:1**（正文）/**≥3:1**（图形），
       不达标就调深色色板」⇒ 深色板每个键的注释里都记着**实测值**（公式见
       `wcag_contrast()`，本文件内自带 ⇒ 门禁/主窗口都能复算 ✓）；
-    · `本仓/bot_gui_ui/theme.py` **v2 值**（= `docs/05-PC端UI重设计方案与开发规划.md`
+    · `D:/MGAS/mapbot_pc/bot_gui_ui/theme.py` **v2 值**（= `docs/05-PC端UI重设计方案与开发规划.md`
       §4.5a 实测驱动修订的那一版）—— ⚠ **浅色板逐键等于它**（`#F5F5F5`/`#616161`/
       `#3F51B5`/`#2E7D32`/`#BF360C`/`#C62828`/`#1565C0`/`#9E9E9E`/`#DDDDDD`/
       `#E8F5E9`/`#FFF3E0`/`#BBDEFB`/`#BDBDBD`/`#FDECEA`/`#757575`…），

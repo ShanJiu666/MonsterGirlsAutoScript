@@ -92,14 +92,36 @@ class FastCap:
             self.sock = None
 
     # ---------- 取图 ----------
-    def _recv_exact(self, n):
-        buf = b''
+    def _recv_exact(self, n, deadline=None):
+        """读满 n 字节；**整帧共用同一个截止时刻**（`deadline` = time.monotonic() 绝对值）
+
+        ⭐⭐⭐⭐⭐ 2026-10-18 **补掉唯一一处可能无限等下去的地方**（防卡死）
+          ---- 病 ----
+            `settimeout()` 是**单次 recv** 的超时，不是整帧的。sidecar 只要还活着、
+            哪怕**每次只吐几个字节**（半死连接 / 内核接收窗口卡住 / 网络栈抖动），
+            `recv()` 每次都会在超时前返回一点 ⇒ 这个 `while` 永远凑不满 n ⇒
+            `grab()` **永不返回** ⇒ `Bot.snap()` 卡在这里 ⇒ 整条循环卡死 ✗
+            （而 `FAST_HOT_TIMEOUT` 的注释写着"卡死时不再每帧白等" —— 那个承诺
+              对"完全不动"成立，对"慢慢滴"**不成立** ✗）
+          ---- 修法 ----
+            整帧只给一个截止时刻（`deadline`），每次循环**先看表**；到点就抛
+            ⇒ `grab()` 里已有的 `except` 会关连接并返回 None ⇒ 走既有的
+              "计数失败 + 冷却 + 自动重试 + 退回 adb" 那条自愈链 ✓
+          ---- 顺带 ----
+            `b""` 拼接改成 `bytearray`：一帧 **2.7 MB**（720×1280×3），按 64KB 分块
+            到达时旧写法要重复拷贝 ~43 次（O(n²) 内存流量）；bytearray.extend 是摊还 O(n) ✓
+            ⚠ 两者**逐字节等价**（`bytes(buf)` 出来的就是同一串数据）✓
+        """
+        buf = bytearray()
         while len(buf) < n:
+            if deadline is not None and time.monotonic() > deadline:
+                raise IOError('sidecar 取帧超时（整帧预算用尽，已收 %d/%d 字节）'
+                              % (len(buf), n))
             chunk = self.sock.recv(n - len(buf))
             if not chunk:
                 raise IOError('sidecar 断开')
-            buf += chunk
-        return buf
+            buf.extend(chunk)
+        return bytes(buf)
 
     def _grab_raw(self):
         # ⭐⭐⭐⭐⭐ 2026-10-06 取帧阶段**分两档**超时（见 FAST_WARM_TIMEOUT 的实测表）：
@@ -112,13 +134,24 @@ class FastCap:
         except Exception:       # noqa: BLE001
             pass
         self.sock.sendall(b'g')
-        head = self._recv_exact(16)
+        # ⚠⚠ 2026-10-18：整帧共用**一个**截止时刻（不是每块各给一份超时）
+        #   `settimeout` 只管单次 recv ⇒ sidecar 半死时「每次吐一点」能无限拖住整帧 ✗
+        #   现在到点必抛 ⇒ `grab()` 关连接返回 None ⇒ 走已有的自愈/退回 adb 链 ✓
+        #   ⚠ 预算是**从 socket 读回来的实际超时** ×2（而不是另算一遍档位）：
+        #     上面那句 `settimeout` 是本函数**唯一的**档位来源，
+        #     这里只是"把它乘以 2 当作整帧的硬上限" ⇒ 不会出现"两处各算一套、慢慢漂移"✗
+        try:
+            _budget = float(self.sock.gettimeout() or FAST_HOT_TIMEOUT)
+        except Exception:       # noqa: BLE001
+            _budget = FAST_HOT_TIMEOUT
+        _deadline = time.monotonic() + max(1.0, _budget) * 2.0
+        head = self._recv_exact(16, deadline=_deadline)
         if head[:4] != b'MUMU':
             raise IOError('sidecar 协议错')
         w, h, bpp = struct.unpack('<III', head[4:])
         if w == 0 or h == 0:
             return None
-        data = self._recv_exact(w * h * bpp)
+        data = self._recv_exact(w * h * bpp, deadline=_deadline)
         arr = np.frombuffer(data, dtype=np.uint8, count=w * h * 3).reshape(h, w, 3)
         self.warmed = True      # ⭐ 拿到过完整一帧 ⇒ 之后按"热"档收紧超时 ✓
         return arr.copy()
