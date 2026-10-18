@@ -306,6 +306,25 @@ def is_explore_tile(sid):
 #:     ⚠ **fail-open**：`score` 传 None / 缺失 ⇒ **不拦**（保守：宁可多拿，别漏拿 ✓）
 #:       —— 老调用点（`bot_gui` / `spec_scan`）不传 score ⇒ 行为与修前**完全一致** ✓
 NAME_SCORE_MIN = 0.85
+# ⭐⭐⭐⭐ 2026-10-18 **特殊地块的宽松门槛**（用户口径，原话）：
+#     「可不可以如果没有任何过门槛的，**且前三个都是同一种格子**，就直接用那个」
+#     ＋ 用户选定范围：「**只对特殊地块放宽**」
+#   ---- 它治什么 ----
+#     真机实测（`runs/r_194740_0.png` 第 3 张图）：`5,3` = **限时礼包**
+#       top5 前 3 名**全是 `S10002_014`**（0.737 / 0.719 / 0.686，第 4 名才是宝箱）
+#       ⇒ 分类器**自己很笃定**，只是绝对分低 ⇒ 被 `< 0.85` 挡掉 ⇒ 不点 ✗
+#     同族还有：黄金宝库 0.569（前 3 名也全是 016）、牛角图腾 0.734、枯木蜂巢 0.733
+#   ---- 为什么"绝对分低"不等于"不可信" ----
+#     `_TPL_FRAMES = 3` ⇒ 每个图块只加载**前 3 帧**，而真机在那格显示的
+#     可能是第 5/27 帧（实测 014 的 f05 能到 **0.974**、016 的 f27 到 **0.869**）
+#     ⇒ 分数低是**模板采样不全**，不是"认不准" ✓
+#     而"前 3 名同一 sid"恰好能把这两种情况分开（模型自己一致 = 笃定）✓
+#   ---- 为什么下限是 0.65 ----
+#     历史 bug（2026-10-12）是 `5,6` 被认成限时礼包 **score=0.441**、
+#     结果去打了整座巨大沙堡 ✗  ⇒ 0.65 明显高于它 ⇒ **不会重犯** ✓
+#     实测会被救回的最低分是 0.569（黄金宝库）—— 那一格另有"前3同sid"把关
+#   ⚠ 普通地块（草地/岩石/…）**完全不受影响**（不在此名单）✓
+SPECIAL_SCORE_MIN = 0.65
 
 
 def is_target(name, sid, marks=None, cfg=None, score=None):
@@ -339,8 +358,16 @@ def is_target(name, sid, marks=None, cfg=None, score=None):
         #   ⚠ 只在这一支拦；`marks` / 探索格那两支**不受影响** ✓
         if score is not None:
             try:
-                if float(score) < NAME_SCORE_MIN:
-                    return False
+                _s = float(score)
+                if _s < NAME_SCORE_MIN:
+                    # ⭐⭐⭐⭐ 2026-10-18 **特殊地块放宽**（见 `SPECIAL_SCORE_MIN` 注释）
+                    #   · 只对 `SPECIAL_NAMES` 那 8 种生效 ⇒ 普通地块一字未改 ✓
+                    #   · 仍要 `>= SPECIAL_SCORE_MIN(0.65)` ⇒ 不重犯"0.441 打沙堡"✗
+                    #   · "前 3 名同一 sid" 那道闸在 `explore_loop` 侧
+                    #     （那里才拿得到完整 top-N 候选 ✓）—— 这里只判名字+分数
+                    if not (str(name) in SPECIAL_NAMES
+                            and _s >= SPECIAL_SCORE_MIN):
+                        return False
             except Exception:               # noqa: BLE001
                 pass                        # 转不了 float ⇒ 不拦（保守 ✓）
         return True

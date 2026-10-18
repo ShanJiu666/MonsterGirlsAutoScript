@@ -1391,6 +1391,45 @@ def _cells_for_model(st, c, log=None, tag='solver', mark_revealed=True,
                     score=_vv.get('score')))
             except Exception:           # noqa: BLE001
                 pass
+            # ⭐⭐⭐⭐⭐ 2026-10-18 **「前 3 名同 sid」补一条命中**（用户口径，原话：
+            #   「可不可以如果没有任何过门槛的，**且前三个都是同一种格子**，
+            #     就直接用那个」＋ 用户选定范围「**只对特殊地块放宽**」）
+            #   ---- 它治什么（真机铁证）----
+            #     `runs/r_194740_0.png` 第 3 张图 `5,3` = **限时礼包**：
+            #       top5 = [014/0.737, 014/0.719, 014/0.686, 003/0.654, 003/0.644]
+            #       ⇒ **前 3 名全是 014**（分类器自己很笃定）
+            #       但 0.737 < `NAME_SCORE_MIN(0.85)` ⇒ target=False ⇒ **不点** ✗
+            #     同族：黄金宝库 0.569（前3也全是 016）、枯木蜂巢 0.733、牛角图腾 0.734
+            #   ---- 为什么"分低"不等于"认不准" ----
+            #     `spots._TPL_FRAMES = 3` ⇒ 每个图块只加载**前 3 帧**，
+            #     而真机那格可能是第 5/27 帧（实测 014 的 f05 能到 **0.974**、
+            #     016 的 f27 到 **0.869**）⇒ 低分是**采样不全**，不是认错 ✓
+            #     "前 3 名同一 sid" 恰好把这两种情况分开（模型自洽 = 笃定）✓
+            #   ---- 三道保险，防重犯 2026-10-12 那个"打巨大沙堡"的 bug ----
+            #     ① 只对 `SPECIAL_NAMES`（8 种特殊地块）生效 ⇒ 普通地块一字未改 ✓
+            #     ② score 必须 >= `SPECIAL_SCORE_MIN(0.65)`（历史 bug 是 0.441）✓
+            #     ③ 前 3 名必须**都等于本格 sid**（不是"都一致但都是别人"）✓
+            if not _vv.get('target'):
+                try:
+                    _tp3 = list(_vv.get('top') or [])[:3]
+                    _sid_now = str(_vv.get('sid') or '')
+                    _sids3 = {str(t[1]) for t in _tp3 if len(t) >= 2}
+                    _sc_now = float(_vv.get('score') or 0)
+                    if (len(_tp3) >= 2 and len(_sids3) == 1
+                            and _sid_now in _sids3
+                            and str(_vv.get('name') or '') in tcfg_mod.SPECIAL_NAMES
+                            and _sc_now >= tcfg_mod.SPECIAL_SCORE_MIN):
+                        _vv['target'] = True
+                        if log is not None:
+                            log.append({tag: 'target_by_top3',
+                                        'cell': '%d,%d' % tuple(_k),
+                                        'name': _vv.get('name'),
+                                        'sid': _sid_now,
+                                        'score': round(_sc_now, 3),
+                                        'top3': [round(float(t[0]), 3) for t in _tp3],
+                                        'note': '前3名同sid ⇒ 特殊地块按笃定采用'})
+                except Exception:       # noqa: BLE001
+                    pass
             # ⭐⭐⭐⭐⭐ 2026-10-06 **金币 < 50 万 ⇒ 商人/宝库「也不规划」必须挡在这里**
             #   （用户报：「**为什么这个号金币明明低于50万了，却还是去买宝库了**」）
             #   ⛔⛔ 真根因：闸门写了 **4 道**，可商人/宝库进计划有 **5 条路** ——
