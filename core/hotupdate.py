@@ -79,18 +79,33 @@ HERE = os.path.dirname(os.path.abspath(__file__))       # core/（本文件所�
 #   ⚠ 引导层**不进补丁** ⇒ 本文件这一处**不会**随热更生效，要**重发整包**才修得掉 ✓
 CNW = 0x08000000 if os.name == 'nt' else 0
 
-# ⚠ 更新源**必须由使用者自己指定**（不要把别人的仓库地址写死进来）。
-#   没有配置时：`hotupdate.py hot` 会明确报错并说明怎么配，**不会**去连任何第三方地址。
-OWNER = os.environ.get('MGAS_PC_UPDATE_OWNER') or ''
-REPO = os.environ.get('MGAS_PC_UPDATE_REPO') or ''
+# ⚠ 更新源：**默认内置**（别人的发布包要能直接检查更新 ✓）
+#   ⭐ 2026-10-18 用户口径：「**要求别人能通过热更获得最新版**」
+#      ---- 之前为什么是空的 ----
+#        我为了让"个人仓址不出现在公开代码里"清空了 OWNER/REPO
+#        ⇒ `configured()` 恒 False ⇒ **端上根本不去检查更新** ⇒ 热更等于没有 ✗✗
+#      ---- 权衡 ----
+#        这个仓（`MGAS-pc-update`）本来就是**公开**热更源，地址不是秘密；
+#        而"功能可用"远比"藏一个已经公开的地址"重要 ⇒ 内置 ✓
+#      ⚠ 仍**全部可用环境变量覆盖**（自建镜像 / 本地 http 测试都用得上 ✓）
+#      ⚠ 本文件是**引导层**（`BOOT_LAYER`）⇒ 改动**不进补丁**，必须重发整包才生效 ✓
+_OWNER_DEFAULT = 'geng-haojie'
+_REPO_DEFAULT = 'MGAS-pc-update'
+#: 更新源的站点根（Gitee 用 `/raw/master/...`；GitHub 用 `raw/...`）
+_BASE_DEFAULT = 'https://gitee.com/%s/%s' % (_OWNER_DEFAULT, _REPO_DEFAULT)
+
+OWNER = os.environ.get('MGAS_PC_UPDATE_OWNER') or _OWNER_DEFAULT
+REPO = os.environ.get('MGAS_PC_UPDATE_REPO') or _REPO_DEFAULT
 _BASE = (os.environ.get('MGAS_PC_UPDATE_BASE')
-         or ('https://github.com/%s/%s' % (OWNER, REPO) if OWNER and REPO
+         or ('https://gitee.com/%s/%s' % (OWNER, REPO) if OWNER and REPO
              else '')).rstrip('/')
 # ⚠ 三个都可用环境变量覆盖 —— **门禁 verify_hotupdate.py 就是靠它们把地址指到本地 http**
 #   ⚠ 没配 _BASE 时**不能**拼出 '/raw/master/manifest.json' 这种半截 URL
 #     （非空 ⇒ 后面的「未配置就跳过」判断会失效，实测踩过）
 MANIFEST_RAW = (os.environ.get('MGAS_PC_MANIFEST_RAW')
                 or (_BASE + '/raw/master/manifest.json' if _BASE else ''))
+# ⚠ API 地址只在 **GitHub** 有 `releases/latest/download/` 那种形态；
+#   Gitee 的公开仓没有等价物 ⇒ 走 raw 就够（`MANIFEST_RAW` 那条 ✓）
 MANIFEST_API = (os.environ.get('MGAS_PC_MANIFEST_API')
                 or (_BASE + '/releases/latest/download/manifest.json'
                     if _BASE else ''))
