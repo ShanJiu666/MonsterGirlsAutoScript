@@ -634,29 +634,38 @@ def rollback(reason='手动回滚'):
 # ───────────────────────── 线上清单 ─────────────────────────
 
 def fetch_manifest(timeout=CONNECT_TIMEOUT):
-    """拉清单。
+    """拉清单（**两条通道**：先 API，失败回落 raw ✓）
 
-    ⚠ 本仓**不内置任何第三方更新源**：未配置时直接报明确错误，
-       而不是去连一个别人的仓库（那既不安全也不礼貌）。
-       配置方式见模块 docstring（`MGAS_PC_UPDATE_BASE` 等环境变量）。
+    ⚠ 2026-10-18 更新口径：更新源**已内置**（见本文件 `_OWNER_DEFAULT` 那段）
+      —— 用户的发布包要能**直接**检查更新，不需要让使用者去配环境变量 ✓
+      ---- 两条通道为什么要分 ----
+        · `MANIFEST_API`：GitHub 的 `releases/latest/download/` 形态（带缓存语义）
+          ⚠ Gitee 的公开仓**没有等价物** ⇒ 那条会 404 ⇒ **正常回落 raw** ✓
+        · `MANIFEST_RAW`：`/raw/master/manifest.json`，Gitee 走这条
+      ⇒ 所以「API 404」**不是错误**，是预期路径（日志会记一行，便于排查 ✓）
+      ⚠ 仍然**全部可用环境变量覆盖**（自建镜像 / 本地 http 门禁测试 ✓）
     """
     if not (MANIFEST_API or MANIFEST_RAW):
         raise RuntimeError(
             '未配置更新源 ⇒ 不执行热更新。\n'
             '  设环境变量 `MGAS_PC_UPDATE_BASE`（例如 https://github.com/<你>/<你的仓>）\n'
             '  或 `MGAS_PC_MANIFEST_RAW` / `MGAS_PC_MANIFEST_API` 指向你自己的清单。')
-    try:
-        if not MANIFEST_API:
-            raise RuntimeError('未配置 API 通道')
-        o = json.loads(_http(MANIFEST_API, timeout=timeout, max_bytes=1 << 20).decode('utf-8'))
-        b64 = (o.get('content') or '').replace('\n', '').replace('\r', '')
-        if not b64:
-            raise RuntimeError('contents 响应里没有 content')
-        return json.loads(base64.b64decode(b64).decode('utf-8'))
-    except Exception as e:                  # noqa: BLE001
-        log('  · API 通道读清单失败 ⇒ 回落 raw（可能是缓存版）：%s' % e)
-        return json.loads(_http(MANIFEST_RAW, timeout=timeout,
-                                max_bytes=1 << 20).decode('utf-8'))
+    # ⚠ 2026-10-18 **顺序很重要**：Gitee 的公开仓没有 API 通道 ⇒ 先试它会白等一个
+    #   `CONNECT_TIMEOUT`（15 秒）才回落 ⇒ 别人点「检查更新」先愣 15 秒 ✗
+    #   ⇒ 判据：**显式配了 `MANIFEST_API` 环境变量**才先走 API（GitHub / 自建用）；
+    #     否则**直接走 raw**（Gitee 默认这条路，零等待 ✓）
+    if os.environ.get('MGAS_PC_MANIFEST_API'):
+        try:
+            o = json.loads(_http(MANIFEST_API, timeout=timeout,
+                                 max_bytes=1 << 20).decode('utf-8'))
+            b64 = (o.get('content') or '').replace('\n', '').replace('\r', '')
+            if not b64:
+                raise RuntimeError('contents 响应里没有 content')
+            return json.loads(base64.b64decode(b64).decode('utf-8'))
+        except Exception as e:              # noqa: BLE001
+            log('  · API 通道读清单失败 ⇒ 回落 raw：%s' % e)
+    return json.loads(_http(MANIFEST_RAW, timeout=timeout,
+                            max_bytes=1 << 20).decode('utf-8'))
 
 
 def hot_verdict(mf, st=None):
