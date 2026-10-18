@@ -89,6 +89,36 @@ SAT_MAX = 40.0           # ⭐ 区域里「高饱和」像素 = clover/boss/redE
 _TPL_FRAMES = max(0, int(os.environ.get('MAPBOT_TPL_FRAMES', '3') or '0'))
 
 
+#: 优选帧清单缓存：{code: {sid: [帧文件名, ...]}}
+_FRAME_PICKS = {}
+
+
+def _frame_picks(code, sid):
+    """该图块**离线优选**的帧文件名列表；没有清单 ⇒ None（调用方回退到前 N 帧）
+
+    ⚠ `MAPBOT_TPL_PICKS=0` ⇒ 全局关掉（回退排查用，立刻回到旧口径 ✓）
+    ⚠ 任何异常都返回 None —— 优选帧是**增益**，**不能**因为清单坏了就起不来 ✗
+    """
+    if (os.environ.get('MAPBOT_TPL_PICKS') or '').strip() == '0':
+        return None
+    if code not in _FRAME_PICKS:
+        d = {}
+        p = os.path.join(UNIT, code, '_frames.json')
+        if os.path.isfile(p):
+            try:
+                import json as _json
+                with open(p, encoding='utf-8') as f:
+                    raw = _json.load(f)
+                if isinstance(raw, dict):
+                    d = {str(k): [str(x) for x in (v or [])]
+                         for k, v in raw.items()
+                         if isinstance(v, (list, tuple))}
+            except Exception:               # noqa: BLE001
+                d = {}
+        _FRAME_PICKS[code] = d
+    return _FRAME_PICKS[code].get(sid) or None
+
+
 def _foot_from_alpha(alpha, dw, dh):
     """贴图 alpha → **真实占格**偏移 [(dr, dc), ...]（按 32px 设计格切）
 
@@ -299,9 +329,41 @@ class Board:
             sid = os.path.basename(d)
             files = sorted(glob.glob(os.path.join(d, '*.png')))
             # ⭐ 2026-09-28 帧采样（_TPL_FRAMES，默认每 sid 前 3 帧 ✓ 显式 maxframes 优先 ✓）
-            _mf = maxframes or _TPL_FRAMES
-            if _mf:
-                files = files[:_mf]
+            # ⭐⭐⭐⭐ 2026-10-18 **优选帧**（治"特殊地块分数不够被漏"）
+            #   ---- 病（真机实测）----
+            #     原来只是 `files[:_mf]` —— **按文件名取前 3 帧**，完全不看内容 ✗
+            #     而真机显示的是动画的某一帧（可能是第 5/27 帧）：
+            #       S10002_014 限时礼包：前3帧 0.75~0.79，**f05 = 0.974**
+            #       S10002_016 黄金宝库：前3帧最高 0.574，**f18 = 0.869**
+            #       S10002_008 旅行商人：前3帧 0.714，**f24 = 0.908**
+            #     ⇒ 分数被"采样不全"拖低 ⇒ `< 0.85` 被当不可信 ⇒ 漏点 ✗✗
+            #   ---- 修法 ----
+            #     `templates/unit/<code>/_frames.json` 里存**离线选好的 3 帧**
+            #     （判据：对"top3 出现过的格"覆盖均分最高 ⇒ 分离度最大）
+            #     实测提升：宝库 +0.296 / 礼包 +0.188 / 商人 +0.194 ✓
+            #   ---- 三条回退口（都不改就得旧行为）----
+            #     ① `_frames.json` 不存在 ⇒ 返回 None ⇒ 走下面原来的 `files[:_mf]`
+            #     ② `maxframes` 显式传入 ⇒ 尊重调用方（旧接口语义不变）
+            #     ③ `MAPBOT_TPL_PICKS=0` ⇒ 全局关掉优选帧 ✓
+            _pick = None
+            if not maxframes:
+                try:
+                    _pick = _frame_picks(self.code, os.path.basename(d))
+                except Exception:           # noqa: BLE001
+                    _pick = None
+            if _pick:
+                _by_name = {os.path.basename(p): p for p in files}
+                _sel = [_by_name[n] for n in _pick if n in _by_name]
+                if _sel:
+                    files = _sel
+                else:
+                    _mf = maxframes or _TPL_FRAMES
+                    if _mf:
+                        files = files[:_mf]
+            else:
+                _mf = maxframes or _TPL_FRAMES
+                if _mf:
+                    files = files[:_mf]
             for fi, f in enumerate(files):
                 im = imread(f)
                 if im is None or im.ndim < 3 or im.shape[2] < 4:
