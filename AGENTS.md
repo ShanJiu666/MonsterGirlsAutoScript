@@ -45,19 +45,25 @@ MGAS-dev.exe  MAPBOT_FRIEND 出现 1 次   ← 自用版才有
 ⇒ 几十张图就把别人硬盘撑爆,且他们**不知道为什么**。
 （用户已明确：「我自用的时候要开启存图功能」—— 那是**只给用户自己**的。）
 
-### ⚠ 仓里有**两份** `MGAS.exe`，别搞混
+### ⚠ exe 的位置（2026-10-18 已改，别按老习惯找）
 ```
-D:\MGAS\_release_pc\MGAS.exe                  ← 仓根（GitHub 上给源码用户看的）
-D:\MGAS\_release_pc\tools\launcher\MGAS.exe   ← 源目录（**打包脚本真正用的那个**）
+tools\launcher\MGAS.exe        ← 朋友版源（打包脚本 build_release_pkg.py:385 拷这个）
+tools\launcher\MGAS-dev.exe    ← 自用版源（打包时也会拷进包根）
+dist\MGAS-v1.0-portable\       ← 整包（**两个 exe 都在这里**，这才是用户/你双击的地方）
 ```
-- 打包脚本 `build_release_pkg.py:385` 拷的是 **`tools/launcher/MGAS.exe`** ✓
-- 仓根那份是**冗余副本**（方便下载源码的人直接双击）
-- **两份都必须是朋友版（MARKER=0）**，且应保持一致：
-  ```powershell
-  Copy-Item tools\launcher\MGAS.exe MGAS.exe -Force   # 编译完就同步
-  ```
-- ⚠ 它们的 **sha256 天然不同**（.NET 每次编译 PE 头里有时间戳/MVID），
-  **不能用 sha 比对判断版本**，只能看 `MAPBOT_FRIEND` 计数 ✓
+⛔⛔ **仓根没有 `MGAS.exe` 了**（2026-10-18 按用户要求删除）
+  ---- 为什么删 ----
+    那个 exe 周围**没有 `python311/`** ⇒ 双击必然报「缺少依赖」（实测：PATH 里找
+    到的 Python 3.11 缺 `rapidocr_onnxruntime`）⇒ 用户反复误点 ✗
+    而 README 早就写着「仓库里没有能直接双击的根目录 exe」⇒ **删掉才与文档一致**
+  ⇒ **以后不要再往仓根放 exe** ✓
+
+### 自用版 = 你自己的那份（双击 `dist\...\MGAS-dev.exe`）
+- `MAPBOT_FRIEND=0` ⇒ `IS_FRIEND=False` ⇒ **存图开 + 精确规划开**
+- 实测：`IS_FRIEND=False SAVE=True SOLVER=True`
+- ⚠ `MGAS-dev.exe` **不进 git**（`.gitignore` 已挡），只在 `dist/` 里出现
+- ✅ 打包脚本已自动带上它（`build_release_pkg.py` 第 390 行之后）
+  ⇒ 以前每次 `Remove-Item dist` 都会丢，现在不会了 ✓
 
 ### 动手前的三条自检
 ⚠⚠ **别用 PowerShell 数** —— 我实测踩过：`[Text.Encoding]::ASCII.GetString($b).Split(...)`
@@ -69,12 +75,14 @@ $py = 'C:\Users\PC\.workbuddy\binaries\python\envs\mapbot\Scripts\python.exe'
 & $py -c @"
 import os
 REL = r'D:\MGAS\_release_pc'
+PKG = os.path.join(REL, 'dist', 'MGAS-v1.0-portable')
 def marker(p):
     b = open(p, 'rb').read()
     return b.count(b'MAPBOT_FRIEND') + b.count('MAPBOT_FRIEND'.encode('utf-16-le'))
-files = [('仓根 MGAS.exe', os.path.join(REL, 'MGAS.exe')),
-         ('launcher/MGAS.exe', os.path.join(REL, 'tools', 'launcher', 'MGAS.exe')),
-         ('launcher/MGAS-dev.exe', os.path.join(REL, 'tools', 'launcher', 'MGAS-dev.exe'))]
+files = [('launcher/MGAS.exe', os.path.join(REL, 'tools', 'launcher', 'MGAS.exe')),
+         ('launcher/MGAS-dev.exe', os.path.join(REL, 'tools', 'launcher', 'MGAS-dev.exe')),
+         ('pkg/MGAS.exe', os.path.join(PKG, 'MGAS.exe')),
+         ('pkg/MGAS-dev.exe', os.path.join(PKG, 'MGAS-dev.exe'))]
 for label, p in files:
     if not os.path.isfile(p):
         print('  %-24s (不存在)' % label); continue
@@ -256,18 +264,30 @@ sidecar_20001.err 真因：can't open file '...\maa_sidecar.py'
 那是旧的平铺结构自用仓（217 个 `.py` 在仓根 + 4.4GB `runs/`）。
 用户已决定「**以发布仓为唯一源**」⇒ **不要**再往它同步，也不要从它拷代码。
 
-⚠ 但它里面有**五处性能优化尚未搬过来**（发布仓没有）：
+### ✅ 那五处性能优化 + UI 优化**已经搬完**（2026-10-18，提交 `c8aaf5f`）
 
-| # | 文件·位置 | 改了什么 | 实测收益 |
+| # | 位置 | 改动 | 实测（本仓，真机帧） |
 |---|---|---|---|
-| 1 | `marks.py` `scan_board` + `match_jobs_parallel` | 8 个模板并行匹配（4 线程） | 2.97s → 1.01s（2.94×） |
-| 2 | `marks.py` 模板像素级去重 | 8→7 个 job | 少 8×10 次匹配 |
-| 3 | `mapbot.py` `Bot.ocr` | 删掉「编码 PNG → 落盘 → RapidOCR 读回」 | 省 0.158s/次（17%） |
-| 4 | `loopguard.py` `own_pids` / `_pid_alive` | 祖先链一次取完 | 3.489s → 1.441s |
-| 5 | `fastcap.py` `_recv_exact` | 整帧共用截止时刻 + `bytearray` | 见源注释 |
+| 1 | `core/marks.py` `match_jobs_parallel` | 4 线程并行匹配 | **0.896 s**（串行 2.97） |
+| 2 | `core/marks.py` 模板像素级去重 | 8→7 job | 少 80 次匹配 |
+| 3 | `core/mapbot.py` `Bot.ocr` | 直接传 ndarray，不落盘 | **0.688 s**（旧 0.912，省 17%） |
+| 4 | `core/loopguard.py` `own_pids` | 一条 PS 脚本取完整祖先链 | **1.667 s**（旧 3.489） |
+| 5 | `core/fastcap.py` `_recv_exact` | 整帧共用 deadline + `bytearray` | 已接线 |
 
-⇒ **待办**：把这五处搬到 `core/` 对应文件（需要逐段搬，不能整文件覆盖，
-   因为发布仓已分叉 —— 例如 `marks.py` 源仓 583 行 / 发布仓 505 行）。
+**UI 也搬了**：`ctk_widgets.py`（方案 A 描边）、`theme.py`（棋盘 54→56）、
+`ctk_theme.py`、`widgets.py` 全量覆盖；`bot_gui.py` **hunk 级移植 32/36**
+（跳过 4 个是我自己的 `core/` 路径修复）。
+
+### ⚠⚠ 搬的时候踩了 3 个「搬一半」的坑（记住这个模式）
+
+| # | 坑 | 后果 |
+|---|---|---|
+| 1 | `marks.py` 漏 `from concurrent.futures import ThreadPoolExecutor` | **运行时 `NameError`，scan_board 直接崩** |
+| 2 | `fastcap` 只搬函数体、**没搬调用点** | `deadline` 收不到 ⇒ **优化零效果** |
+| 3 | 补调用点时漏了 `_budget` 定义段 | `NameError: _budget` |
+
+⇒ **教训：「函数搬过来了」≠「优化生效了」** —— 依赖（import / 调用点 / 局部变量）
+   必须逐个核对。第 1 个是**真机 bench 跑出异常**才发现的，光看语法检查会漏 ✗
 
 ---
 

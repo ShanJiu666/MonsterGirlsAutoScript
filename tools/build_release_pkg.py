@@ -389,6 +389,24 @@ def main():
     else:
         print('  ⚠ 缺 tools/launcher/MGAS.exe（先跑 tools/launcher/build_launcher.py）')
 
+    # ⭐ 2026-10-18 **自用版启动器也要进包**（用户：「dist那个是我的版本吗」
+    #   「我自用的时候要开启存图功能」）
+    #   ---- 为什么放进发布包里，不怕发错 ----
+    #     `MGAS-dev.exe` 只是**多一个文件**；朋友双击 `MGAS.exe` 照旧是朋友版 ✓
+    #     而用户自己双击 `MGAS-dev.exe` ⇒ `MAPBOT_FRIEND=0` ⇒ 存图开 ✓
+    #   ⚠ 它**不进 git**（`.gitignore` 已挡 `MGAS-dev.exe`），只在本地打包时拷进去
+    #   ⚠ 打包前会 `Remove-Item dist` ⇒ 不在这里补拷，用户那份每次都会消失 ✗
+    dev_src = os.path.join(REPO, 'tools', 'launcher', 'MGAS-dev.exe')
+    if os.path.isfile(dev_src):
+        try:
+            shutil.copy2(dev_src, os.path.join(pkg, 'MGAS-dev.exe'))
+            print('  ✓ MGAS-dev.exe（自用版：开存图 + 精确规划）')
+        except Exception as e:              # noqa: BLE001
+            print('  ⚠ MGAS-dev.exe 拷不进去（%r）⇒ 自用版要手工放' % (e,))
+    else:
+        print('  · 没有 MGAS-dev.exe（自用版）⇒ 跳过')
+        print('    （要的话：python tools\\launcher\\build_launcher.py --dev）')
+
     bat = os.path.join(pkg, '幻想少女公会-自动探索.bat')
     io.open(bat, 'w', encoding='utf-8', newline='\r\n').write(
         '@echo off\r\n'
