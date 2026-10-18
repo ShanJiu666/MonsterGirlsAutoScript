@@ -45,14 +45,47 @@ MGAS-dev.exe  MAPBOT_FRIEND 出现 1 次   ← 自用版才有
 ⇒ 几十张图就把别人硬盘撑爆,且他们**不知道为什么**。
 （用户已明确：「我自用的时候要开启存图功能」—— 那是**只给用户自己**的。）
 
-### 动手前的三条自检
-```powershell
-# ① 仓根的 MGAS.exe 必须是「朋友版」：MAPBOT_FRIEND 出现次数应为 0
-$b = [IO.File]::ReadAllBytes('D:\MGAS\_release_pc\MGAS.exe')
-$n = ([Text.Encoding]::ASCII.GetString($b)).Split('MAPBOT_FRIEND').Count - 1
-$n2 = ([Text.Encoding]::Unicode.GetString($b)).Split('MAPBOT_FRIEND').Count - 1
-"MAPBOT_FRIEND = $($n + $n2)  （必须 = 0）"
+### ⚠ 仓里有**两份** `MGAS.exe`，别搞混
+```
+D:\MGAS\_release_pc\MGAS.exe                  ← 仓根（GitHub 上给源码用户看的）
+D:\MGAS\_release_pc\tools\launcher\MGAS.exe   ← 源目录（**打包脚本真正用的那个**）
+```
+- 打包脚本 `build_release_pkg.py:385` 拷的是 **`tools/launcher/MGAS.exe`** ✓
+- 仓根那份是**冗余副本**（方便下载源码的人直接双击）
+- **两份都必须是朋友版（MARKER=0）**，且应保持一致：
+  ```powershell
+  Copy-Item tools\launcher\MGAS.exe MGAS.exe -Force   # 编译完就同步
+  ```
+- ⚠ 它们的 **sha256 天然不同**（.NET 每次编译 PE 头里有时间戳/MVID），
+  **不能用 sha 比对判断版本**，只能看 `MAPBOT_FRIEND` 计数 ✓
 
+### 动手前的三条自检
+⚠⚠ **别用 PowerShell 数** —— 我实测踩过：`[Text.Encoding]::ASCII.GetString($b).Split(...)`
+   在这台机上对**朋友版** exe 也报出 `MAPBOT_FRIEND = 1075`（**假阳性**），
+   差点以为传错了自用版。**用下面这段 Python**（同一份文件它数出 0，才可信）：
+
+```powershell
+$py = 'C:\Users\PC\.workbuddy\binaries\python\envs\mapbot\Scripts\python.exe'
+& $py -c @"
+import os
+REL = r'D:\MGAS\_release_pc'
+def marker(p):
+    b = open(p, 'rb').read()
+    return b.count(b'MAPBOT_FRIEND') + b.count('MAPBOT_FRIEND'.encode('utf-16-le'))
+files = [('仓根 MGAS.exe', os.path.join(REL, 'MGAS.exe')),
+         ('launcher/MGAS.exe', os.path.join(REL, 'tools', 'launcher', 'MGAS.exe')),
+         ('launcher/MGAS-dev.exe', os.path.join(REL, 'tools', 'launcher', 'MGAS-dev.exe'))]
+for label, p in files:
+    if not os.path.isfile(p):
+        print('  %-24s (不存在)' % label); continue
+    m = marker(p)
+    ok = (m == 0) if 'dev' not in label.lower() else (m == 1)
+    print('  %-24s MARKER=%s %s' % (label, m, 'OK' if ok else '*** 错 ***'))
+"@
+```
+期望输出：**仓根 + launcher 的 `MGAS.exe` 都是 0；只有 `MGAS-dev.exe` 是 1**。
+
+```powershell
 # ② MGAS-dev.exe 必须在 .gitignore 里
 git -C D:\MGAS\_release_pc check-ignore -v tools/launcher/MGAS-dev.exe
 
