@@ -19,6 +19,11 @@ friend_mode.flag
 dist/
 *.zip
 
+# ⭐ 自用版启动器（`build_launcher.py --dev` 的产物）—— **绝不入仓/不发人**
+#   它带 `MAPBOT_FRIEND=0`（开存图 + 精确规划），是给我自己用的那份。
+#   要发布的那个是 `tools/launcher/MGAS.exe`（不带那句话）✓
+MGAS-dev.exe
+
 # 打包时临时挂的 venv（若用过 --keep-venv）
 venv/
 .venv/

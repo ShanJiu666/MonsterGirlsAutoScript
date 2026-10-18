@@ -6,6 +6,23 @@
 //   · 不含任何业务逻辑（逻辑全在 Python 侧，便于热更新）
 //   · 出错时把完整输出落到 logs/launcher.log，客服排查有据
 //
+// ⭐⭐⭐ 2026-10-18 **自用版 / 朋友版 由编译期开关决定**（用户口径：
+//     「以发布仓为唯一源，**我自用的时候要开启存图功能**」＋「能不能全自动，
+//       **我的启动器弄特殊一点**」）
+//   ---- 为什么要这样做 ----
+//     一个包两用：自己下载来用要**存图**（研究/排查要看帧），发给别人不该存
+//     （0.7MB/图，几十张就把硬盘撑满）。
+//     原来只能手工删 `friend_mode.flag` 或设环境变量 ⇒ **每次重下/更新都要重搞** ✗
+//   ---- 做法 ----
+//     本文件用 `#if MGAS_DEV` 包一段：自用版启动器**编译进**这句
+//         psi.EnvironmentVariables["MAPBOT_FRIEND"] = "0";
+//     ⇒ 自用版 = 存图开 + 精确规划开（= 开发版行为）
+//     ⇒ 朋友版（GitHub 上那个 exe）**没有这段字节** ⇒ 保持 `friend_mode.flag` 的朋友版行为 ✓
+//   ---- 怎么编自用版 ----
+//     python tools\launcher\build_launcher.py --dev
+//     ⚠ 产物别覆盖仓里的 MGAS.exe（那个是要发给别人的），脚本会自动改名成
+//        MGAS-dev.exe，你把它放进自己的解压目录即可 ✓
+//
 // 编译（零安装，用系统自带 csc）：
 //   C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 //       /target:winexe /platform:anycpu /optimize+ /out:MGAS.exe MGASLauncher.cs
@@ -102,6 +119,15 @@ namespace MGAS
                 psi.EnvironmentVariables["PYTHONUTF8"] = "1";
                 // 让子进程别再弹黑窗（GUI 是 tkinter，本身不需要控制台）
                 psi.EnvironmentVariables["PYTHONLEGACYWINDOWSSTDIO"] = "0";
+
+#if MGAS_DEV
+                // ⭐⭐⭐ 自用版专属（`build_launcher.py --dev` 才编进来）
+                //   `MAPBOT_FRIEND=0` ⇒ friend_mode.IS_FRIEND=False
+                //     ⇒ 存图勾选**出现**、`SAVE_FIRST_DEFAULT=True`
+                //     ⇒ 精确规划也一并开启（= 开发版行为）
+                //   ⚠ 朋友版没有这两行（条件编译 ⇒ 那版 exe 里**没有这段字节**）✓
+                psi.EnvironmentVariables["MAPBOT_FRIEND"] = "0";
+#endif
 
                 var sb = new StringBuilder();
                 using (var p = new Process { StartInfo = psi })
