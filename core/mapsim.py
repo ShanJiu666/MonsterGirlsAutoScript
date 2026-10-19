@@ -774,11 +774,29 @@ class MapSim:
             for j in range(NCELL):
                 if self.board[j] == bi:
                     self.board[j] = -1
-            self._reveal_neighbours()
+            # ⛔ 2026-10-19 战斗格 / 商人 / 宝库都是**内容格** ⇒ 消耗后**不揭示邻格** ✗
+            #   （用户确认游戏规则：「只有空地能连锁揭示」）
+            self._reveal_neighbours(from_plain=False)
         return b
 
-    def _reveal_neighbours(self):
-        """消耗地块后：相邻格解锁为「已揭示」（实测：RemoveBlock → SetBlockVisible 连锁揭示）"""
+    def _reveal_neighbours(self, from_plain=True):
+        """消耗地块后：相邻格解锁为「已揭示」
+
+        ⛔⛔ 2026-10-19 **只有空地才连锁揭示**（用户两次指正 + 游戏规则确认）
+          ---- 用户原话 ----
+            ① 「打完 1,3 后不能直接点到 2,5，中间还有草地隔着呢」
+            ② 「3,3 和 1,3 都是**战斗格**」「**2,5 没有被点亮**」
+          ---- 病 ----
+            原来本函数**无条件**跑，且判据只看"邻格 `board < 0`"
+            ⇒ 战斗格打掉后 `board=-1`，与"空地连锁吃掉"**无法区分**
+            ⇒ 战斗格的邻格被判"已揭示" ⇒ 求解器以为 2,5 点得到 ✗✗
+          ---- 修法 ----
+            `from_plain=False` ⇒ **直接返回，什么都不揭**
+            调用点：`click()` 空地分支 ⇒ 默认 True ✓
+                    `resolve_panel()`（战斗/商人/宝库）⇒ False ✓
+        """
+        if not from_plain:
+            return
         for i in range(NCELL):
             bi = self.board[i]
             if bi < 0:

@@ -68,6 +68,10 @@ _CELL_MIN, _CELL_MAX = 24, 160                          # 每格像素边长夹�
 # ══════════════════════════════════════════════════════════════════════
 # 零、容错小工具（**全部不抛**；这是本文件的地基）
 # ══════════════════════════════════════════════════════════════════════
+
+#: 计划序号层（圆 + 箭头）的 Canvas tag —— 只删这一层就能重画而不闪
+_SEQ_TAG = ('seq',)
+
 def _s(v, default=''):
     """任何东西 → str；None → default；连 `__str__` 坏了也不抛"""
     if v is None:
@@ -1238,6 +1242,59 @@ class BoardCanvas(tk.Canvas):
         x0, y0, x1, y1 = self._cell_rect(*rc)
         return ((x0 + x1) / 2.0, y0)                # 格顶边中点（单格）
 
+    def paint_order(self, order=None, board=None, spans=None):
+        """**只重画"计划序号层"**（圆 + 箭头）⇒ 换步数时**零闪烁**
+
+        ⛔ 2026-10-19 用户：「当前状态里的步数蓝色圆图标为什么一直闪」
+          ---- 病 ----
+            `bot_gui._paint_plan()` 每轮规划行到达就调 `_update_board()`
+            ⇒ 本类 `update_board()` 会 **`delete('all')` + 全量重画**
+            ⇒ 序号圆被"抹掉再画" ⇒ 视觉上一直闪 ✗
+          ---- 修法 ----
+            序号层的每个 item 都带 `tags=_SEQ_TAG`
+            ⇒ 这里**只 `delete(_SEQ_TAG)` + 重走 `_draw_order`**
+            ⇒ 格子/底色/角标一个都不碰 ⇒ 零闪烁 ✓
+
+        `board`/`spans` 只为算 `member`（多格块 → 序号圆心取块中心），
+        **不参与绘制** ⇒ 换计划时传缓存里那份就行 ✓
+        """
+        try:
+            self.delete(_SEQ_TAG)
+        except Exception:                   # noqa: BLE001
+            pass
+        try:
+            seq = self._norm_order(order)
+        except Exception:                   # noqa: BLE001
+            return
+        if not seq:
+            return
+        # ── 照抄 `update_board` L897-907 的算法（**别自创**，否则圆心会偏 ✗）──
+        #   `_norm_spans(spans)` ⇒ (raw_blocks, member)，两者下标对齐
+        #   `member` 是 `{格: 块下标}`，`_draw_order` 靠它 + `_plan_center` 定圆心 ✓
+        member, blks = {}, []
+        try:
+            recs = {}
+            try:
+                recs = self._norm_board(board or {})
+            except Exception:               # noqa: BLE001
+                recs = {}
+            raw_blocks, member = self._norm_spans(spans or [])
+            for b in raw_blocks:
+                rec = recs.get(b['anchor'])
+                is_camp = (_CAMP_WORD in (rec['name'] if rec else ''))
+                rects = [self._cell_rect(*rc) for rc in b['cells']]
+                bbox = (min(t[0] for t in rects), min(t[1] for t in rects),
+                        max(t[2] for t in rects), max(t[3] for t in rects))
+                blks.append({'anchor': b['anchor'], 'cells': b['cells'],
+                             'rec': rec, 'camp': bool(is_camp), 'bbox': bbox})
+        except Exception:                   # noqa: BLE001
+            member, blks = {}, []
+        try:
+            self._draw_order(seq, member, blks)
+        except Exception:                   # noqa: BLE001
+            pass
+
+
     def _draw_order(self, seq, member=None, blks=None):
         """计划点序：相邻序号之间箭头连线 + **格名正上方**的序号圆（1,2,3…）
 
@@ -1325,14 +1382,18 @@ class BoardCanvas(tk.Canvas):
                                          _y0 + _ny * _off * _sgn,
                                          _x1 + _nx * _off * _sgn,
                                          _y1 + _ny * _off * _sgn,
-                                         fill=_col, width=1, capstyle='round')
+                                         fill=_col, width=1, capstyle='round',
+                                         tags=_SEQ_TAG)
                     except Exception:       # noqa: BLE001
                         break
         # ② 正式线（带箭头；箭头露在圆外 ✓）
         for _x0, _y0, _x1, _y1, _nx, _ny in _segs:
             self.create_line(_x0, _y0, _x1, _y1, fill=T.C_PRIMARY, width=2,
-                             arrow='last', capstyle='round')
+                             arrow='last', capstyle='round',
+                             tags=_SEQ_TAG)
         for cxx, cyy, n in pts:
             self.create_oval(cxx - rad, cyy - rad, cxx + rad, cyy + rad,
-                             fill=T.C_PRIMARY, outline=T.BOARD_BG, width=2)
-            self.create_text(cxx, cyy, text=_s(n), font=T.FONT_TINY_UI, fill=T.BOARD_BG)
+                             fill=T.C_PRIMARY, outline=T.BOARD_BG, width=2,
+                             tags=_SEQ_TAG)
+            self.create_text(cxx, cyy, text=_s(n), font=T.FONT_TINY_UI,
+                             fill=T.BOARD_BG, tags=_SEQ_TAG)

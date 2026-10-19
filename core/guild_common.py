@@ -426,10 +426,59 @@ def scroll_to_top(b, log=None, times=None, max_swipes=8):
       多滚 2 次保证到底；顶楼再滚不动，无副作用 ✓）
     """
     n = int(times) if times is not None else (FLOOR_SWIPES + 2)
-    for _ in range(max(1, n)):
+    # ⛔⛔⛔ 2026-10-19 **修"滑完就谎报到底"**（这是"点开派遣面板"的真根因）
+    #   ---- 真机铁证（loop_log.json 按时间顺序）----
+    #     {"guild":"chair_floor_found","by":"task_panel"}    ← 在 2 楼
+    #     {"alch":"pre_scroll_no_panel"}                     ← 滚动前没面板
+    #     {"guild":"scroll_top","n":5}                       ← 滑 5 次
+    #     {"alch":"open","at":[240,445], ...'黑晶女仆'}       ← 第一次点就出派遣面板
+    #     {"alch":"open","at":[240,435], ...'黑晶女仆'}       ← 之后 8 次全是它
+    #   ---- 根因链（一条）----
+    #     ① 本函数原来**无条件 return True** —— 滑 5 次就当"到 4 楼了" ✗
+    #        （`max_swipes` 声明了却**从未使用** ⇒ 作者当年也没验证）
+    #     ② 实际还在 2 楼
+    #     ③ 而炼金宝箱候选与椅1 **几何重合**：
+    #          CHAIR_X=(263,388,513,628)  CHAIR_Y=470
+    #          ALCHEMY_CHEST_XS=(240,215,262)  ALCHEMY_CHEST_YS=(445,435,470)
+    #          ⇒ (262,470) ↔ 椅1(263,470)  dx=1 dy=0 **几乎同一点**
+    #     ④ ⇒ 在 2 楼点炼金坐标 = **点椅子** ⇒ **开出派遣面板** ✗✗
+    #   ---- 修法（复用既有判据，不新造）----
+    #     `chair_row_hint()` 本来就是"这是不是椅子那层"（文字 + 白色气泡图像）
+    #     · 还在椅子层 ⇒ 继续滑（终于用上 `max_swipes`）
+    #     · 不是椅子层 ⇒ 到顶，True
+    #     · 滑到上限还在 ⇒ **如实 False**（调用方据此别乱点 ✗ 不假装成功）
+    _cap = max(int(max_swipes), int(n))
+    _done = 0
+    _still_chair = None
+    for _k in range(_cap):
         swipe_abs(*SWIPE_UP_XY)
         time.sleep(0.9)
-    _log(log, {'guild': 'scroll_top', 'n': n})
+        _done += 1
+        if _done < int(n):
+            continue                    # 前 n 次直接滑（实测的必经次数）
+        try:
+            _it = ocr_items(b, tag='scroll_chk%d' % _done)
+            try:
+                _im = b.img()
+            except Exception:           # noqa: BLE001
+                _im = None
+            _still_chair = bool(chair_row_hint(_it, _im))
+        except Exception:               # noqa: BLE001
+            _still_chair = None         # 判不了 ⇒ 不硬判（按"到了"走，老行为 ✓）
+        _log(log, {'guild': 'scroll_verify', 'n': _done,
+                   'still_chair': _still_chair})
+        if _still_chair is not True:
+            break                       # 不在椅子层了 ⇒ 已过 2 楼 ✓
+    _log(log, {'guild': 'scroll_top', 'n': _done, 'cap': _cap,
+               'still_chair': _still_chair})
+    if _still_chair is True:
+        _log(log, {'guild': 'scroll_top_failed', 'n': _done})
+        try:
+            print('   ⚠ 滑了 %d 次**仍在椅子层**（2 楼）⇒ 如实返回 False，'
+                  '别在 2 楼点炼金坐标（会点到椅子 ✗）' % _done)
+        except Exception:               # noqa: BLE001
+            pass
+        return False
     return True
 
 

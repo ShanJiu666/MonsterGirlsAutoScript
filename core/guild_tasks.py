@@ -298,6 +298,22 @@ def run(b, log=None, chairs=(1, 2, 3, 4), sweeps=2, leave=False):
     `leave`：做完要不要离开公会（默认不离开，交给调用方）
     """
     log = log if log is not None else []
+    # ⛔⛔ 2026-10-19 **必须把设备号登记给 `guild_common`**（真机事故：
+    #   用户报「**完全没有滑动**」，日志「滑了 8 次仍在椅子层」）
+    #   ---- 根因 ----
+    #     `guild_common.swipe_abs()` 走**裸 adb**，设备号来自 `_dev_of()`：
+    #         `_DEV_CUR['dev'] or MAPBOT_DEVICE or DEV(=127.0.0.1:16384)`
+    #     而 `_DEV_CUR['dev']` **只能由 `set_device()` 填**，
+    #     它只在 `wrap_dry(bot)` 里被调用 —— 那两处调用**都在 `main()` CLI 路径**
+    #     ⇒ 从 `explore_loop._guild_daily` 走**库调用**直进 `run()` 时
+    #        **一次都没登记** ⇒ 退到默认 `16384`
+    #     ⇒ 用户跑 16448，滑动却发到 16384（那台没游戏）⇒ **屏幕纹丝不动** ✗✗
+    #   ---- 修法 ----
+    #     入口就登记：`b.dev` 是 `GC.Bot` 的字段（`wrap_dry` 正是读它）✓
+    try:
+        GC.set_device(getattr(b, 'dev', None))
+    except Exception:                   # noqa: BLE001
+        pass
     res = {'ok': False, 'chairs': {}, 'claimed': 0, 'dispatched': 0}
     say('')
     say('=' * 62)

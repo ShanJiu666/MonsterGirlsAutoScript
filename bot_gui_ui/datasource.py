@@ -344,6 +344,31 @@ class LoopLogTail:
         ok, obj, err = _read_json_file(self._path)
         self._stamp = st
         if not ok:
+            # ⭐⭐⭐ 2026-10-19 **解析失败就隔 50ms 重试一次**
+            #   ---- 真机事故 ----
+            #     `explore_loop.flush()` 原来用 `open('w')` **截断后写**（~200KB/几十 ms），
+            #     而本函数用 **mtime/size 指纹**判"变了没" ⇒ 截断瞬间 size 变小 ⇒
+            #     立刻来解析 ⇒ 读到半截 ⇒ `JSONDecodeError('Expecting property name…')`
+            #     （gui_console_20261019.log 16:21:52 有这条原文 ✓）
+            #     ⇒ 失败时**保留上次 events** ⇒ 棋盘停在上一张图 ✗✗
+            #   ---- 两道修 ----
+            #     写侧已改**原子替换**（`.tmp` + `os.replace`）⇒ 理论上不会再有半截
+            #     这里再加**一次重试**：万一别处非原子写 / Windows 上被杀软占用 ✓
+            #   ⚠ 只重试一次（50ms）—— 别把 2 秒一拍的 tick 拖长 ✗
+            #   ⚠ 实测（Windows 并发压力）：**失败全是 PermissionError、内容不残缺**
+            #     ⇒ 不是"读到半截"，是 `os.replace` 换名瞬间 `open()` 被短暂拒绝
+            #     ⇒ 重试就够。量化：3 次×50ms ⇒ 失败 4 → **0**（1 次会有残余）
+            for _try_r in range(3):
+                try:
+                    import time as _t_r
+                    _t_r.sleep(0.05)
+                    ok2, obj2, err2 = _read_json_file(self._path)
+                except Exception:               # noqa: BLE001
+                    continue
+                if ok2:
+                    ok, obj, err = ok2, obj2, ''
+                    break
+        if not ok:
             self._last_error = err
             return False                                # ⚠ 保留上次的 events / board
         if not isinstance(obj, list):

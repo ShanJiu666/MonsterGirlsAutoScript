@@ -2192,6 +2192,28 @@ FORETELL = {
     'PRIO_STOP': ('幸运', '和平', '元素'),
 }
 
+# ⭐⭐⭐ 2026-10-19 **「预言重复选择」二次确认弹窗**（用户要求"记住它，别被卡住"）
+#   ---- 真机现场（`_imgs/now_screen.png`，2026-10-19 17:2x 设备 16448）----
+#     点完「和平」这张卡后，游戏**先弹一个「提示」确认框**：
+#        提示
+#        和平已有紫色同名预言，
+#        重复选择会将其覆盖。
+#        [取消]  [确定]
+#   ---- 为什么会卡死 ----
+#     `FORETELL['ok'] = (360, 888)` 是「预言石板」主面板的确定按钮；
+#     而这个提示弹窗在 **y≈742** ⇒ 点 (360,888) 落在弹窗下方**空白处**
+#     ⇒ 弹窗不消失 ⇒ 后续所有点击全打在弹窗上 ⇒ **卡死** ✗✗
+#   ---- 坐标来源（OCR 实测 conf 1.00，不是猜的）----
+#     (204,742) 取消 ｜ (516,742) 确定
+#   ---- 认它的判据（用文字，不用坐标）----
+#     同一帧里出现「提示」+「重复选择会将其覆盖」（后者是这类弹窗独有的句子 ✓）
+FORETELL_DUP = {
+    'title': '提示',
+    'line': '重复选择会将其覆盖',      # 独有句 ⇒ 不会误认别的"提示"弹窗 ✓
+    'cancel': (204, 742),
+    'ok': (516, 742),
+}
+
 
 def _univ_close(bot, log, what='', wait=1.6):
     """用**万能点位**关面板（用户口径；三个新面板都吃这一下 ✓）"""
@@ -2509,6 +2531,59 @@ def _foretell_read_cards(bot, log=None):
     return [], FORETELL_WAIT_ROUNDS
 
 
+def _foretell_dup_confirm(bot, log=None, rounds=3):
+    """认出「预言重复选择」提示 ⇒ 点**确定**（同意覆盖）⇒ True
+
+    ⛔ 2026-10-19 用户报：「点中间的预言会**弹出没有见过的弹窗**」
+      ⇒ 必须处理，否则后续点击全打在弹窗上 ⇒ 卡死 ✗
+
+    ---- 判据（文字，不是坐标）----
+      同帧出现「提示」+「重复选择会将其覆盖」
+      ⚠ 后半句是这类弹窗**独有**的 ⇒ 不会误认别的"提示"框 ✓
+
+    ---- 为什么点「确定」不点「取消」----
+      这是游戏在问"要不要用新预言覆盖同色旧预言"
+      ⇒ 点取消 = **这一次选择白做**（卡没选上，还白浪费一次机会）✗
+      ⇒ 点确定 = 按我们的策略覆盖掉 ✓（用户要的就是"选更好的那张"）
+
+    ---- 失败怎么办 ----
+      等 `rounds` 轮仍没读到弹窗 ⇒ 返回 False（**不盲点**，交回上层）
+    """
+    import time as _t
+    for rd in range(max(1, rounds)):
+        if rd:
+            _t.sleep(0.6)
+        try:
+            _invalidate(bot)
+        except Exception:                   # noqa: BLE001
+            pass
+        try:
+            it = _items(bot)
+        except Exception:                   # noqa: BLE001
+            continue
+        # 同帧必须**两句都在**（只认「提示」会把别的确认框也认进来 ✗）
+        has_title = any(str(t.get('text') or '').replace(' ', '') ==
+                        FORETELL_DUP['title'] for t in it)
+        has_line = any(FORETELL_DUP['line'] in
+                       str(t.get('text') or '').replace(' ', '') for t in it)
+        if not (has_title and has_line):
+            continue
+        if log is not None:
+            log.append({'foretell': 'dup_confirm_seen', 'round': rd})
+        try:
+            bot.tap_dlg(*FORETELL_DUP['ok'], wait=1.4)
+        except Exception as _e:             # noqa: BLE001
+            if log is not None:
+                log.append({'foretell': 'dup_confirm_err', 'e': repr(_e)[:80]})
+            return False
+        if log is not None:
+            log.append({'foretell': 'dup_confirm_ok',
+                        'at': list(FORETELL_DUP['ok'])})
+        say('      · 遇到「预言重复」提示 ⇒ 点确定（同意覆盖）✓')
+        return True
+    return False
+
+
 def foretell_flow(bot, log, flags=None):
     """预言石碑 —— 真机全链路实测（2026-10-07）
 
@@ -2575,12 +2650,52 @@ def foretell_flow(bot, log, flags=None):
                 'cards': [{'n': c['name'], 'tier': c['tier'],
                            'eff': (c.get('eff') or '')[:28]} for c in cards]})
 
-    # ── 排序：① 掉宝 ② 停脚本类（幸运/和平）③ 按品阶 ──
+    # ── 排序：① 掉宝 ② **用户勾了才优先**的停脚本类 ③ 按品阶 ──
+    # ⛔⛔⛔ 2026-10-19 **修「没勾和平却优先选和平」**（用户原话：
+    #   「我窗口没有勾选和平啊」「勾选控制要优先」）
+    #   ---- 真机证据 ----
+    #     `runs/dev_16448/.stop_peace = 0`（**没勾**）
+    #     脚本却优先选了「和平」⇒ 还弹出「和平已有紫色同名预言，重复选择会将其覆盖」✗
+    #   ---- 病（两层）----
+    #     ① `PRIO_STOP` 命中就无条件置顶 ⇒ 勾选**完全没参与"要不要优先"** ✗
+    #     ② 数据表里「和平」有 **3 种**（名称一样、只能靠文案分）：
+    #          foretell_22  A  …至少出现 N 个**金属宝箱怪**
+    #          foretell_23  A  …至少出现 N 个**旅行商人**
+    #          foretell_24  S  …至少出现 N 个**机巧宝箱怪**
+    #        而旧判据只认「和平」两个字 ⇒ 三种一视同仁 ✗
+    #        （用户口径一直只说**金属宝箱怪**那个 ✓）
+    #   ---- 修法（按用户口径：**勾选 = 要不要优先**）----
+    #     · 和平：**只有金属宝箱怪**那一种 ＋ 勾了 `.stop_peace` ⇒ 才优先
+    #     · 元素：**只有紫/橙**档 ＋ 勾了对应开关 ⇒ 才优先（蓝档从不优先 ✓）
+    #     · 幸运：`foretell_32` 是唯一一种、SS 级、且没有独立勾选
+    #       ⇒ 用户从没反对 ⇒ **保留优先** ✓
+    _fl = flags or {}
+
+    def _is_prio_stop(c):
+        """这张卡该不该"优先选"——**由用户勾选决定**（不是无条件）"""
+        blob = c['name'] + c['eff']
+        # ① 幸运（SS，唯一一种，无独立勾选）⇒ 保留优先 ✓
+        if '幸运' in blob:
+            return True
+        # ② 和平：**只认金属宝箱怪** ＋ 必须勾了 stop_peace
+        if '和平' in blob:
+            if not bool(_fl.get('stop_peace_metal', False)):
+                return False            # 没勾 ⇒ **不优先**（按品阶走 ✓）
+            return '金属宝箱怪' in blob  # 勾了也只认金属宝箱怪那一种 ✓
+        # ③ 元素：只认紫/橙（蓝档不优先），且要勾对应开关
+        if '元素' in blob:
+            if '橙色' in blob and bool(_fl.get('stop_elem_orange', False)):
+                return True
+            if '紫色' in blob and bool(_fl.get('stop_elem_purple', False)):
+                return True
+            return False                # 蓝档 / 没勾 ⇒ 不优先 ✓
+        return False
+
     def _key(c):
         nm = c['name']
         if FORETELL['PRIO_DROP'] in (nm + c['eff']):
             return (0, 0)
-        if any(k in (nm + c['eff']) for k in FORETELL['PRIO_STOP']):
+        if _is_prio_stop(c):
             return (1, 0)
         return (2, -c['tier'])
     cards.sort(key=_key)
@@ -2662,11 +2777,50 @@ def foretell_flow(bot, log, flags=None):
     #   ⚠ 留着更坏：它会走到「点确定」⇒ 万一前面漏判，它会**静默**填上 `out['stop']`
     #     而那时卡已选、确定已点 ⇒ **假的"立即停止"** ✗（正是用户报的那个现象）
 
-    # ── 点「确定」──
-    p = _find_text_btn(b, ('确定',), ymin=820, ymax=960)
-    at = (p[0], p[1]) if p else FORETELL['ok']
-    bot.tap_dlg(at[0], at[1], wait=2.2)
-    log.append({'foretell': 'ok', 'at': list(at), 'src': 'ocr' if p else 'fallback'})
+    # ⛔⛔⛔ 2026-10-19 **先处理「预言重复选择」提示弹窗**（用户报「弹出没有见过的弹窗」）
+    #   ---- 真机现场（`_imgs/now_screen.png`，设备 16448）----
+    #     点完「和平」后游戏先弹：
+    #        提示
+    #        和平已有紫色同名预言，
+    #        重复选择会将其覆盖。
+    #        [取消(204,742)]  [确定(516,742)]
+    #   ---- 为什么会卡死（就在下面三行）----
+    #     `_find_text_btn(b, ('确定',), ymin=820, ymax=960)` **只找 y 820~960**
+    #     而这个弹窗的「确定」在 **y=742** ⇒ **被 ymin 直接排除** ✗
+    #     ⇒ 找不到 ⇒ 退回 `FORETELL['ok']=(360,888)`
+    #     ⇒ 但弹窗只到 y≈800 ⇒ (360,888) 点在**弹窗下方空白**
+    #     ⇒ 弹窗不消失 ⇒ 后面所有点击全打在弹窗上 ⇒ **卡死** ✗✗
+    #   ---- 修法 ----
+    #     点完卡就**先问一句**"是不是弹了重复选择提示"（`_foretell_dup_confirm`）
+    #     是 ⇒ 点它的「确定」＝**同意覆盖**（用户要的就是"选更好的那张" ✓）
+    #     ⚠ **绝不点「取消」** —— 那等于这一次选择白做 ✗
+    _dup = False
+    try:
+        _dup = _foretell_dup_confirm(b, log)
+    except Exception as _edu:               # noqa: BLE001
+        log.append({'foretell': 'dup_probe_err', 'e': repr(_edu)[:80]})
+
+    # ── 点「确定」（主面板）──
+    if _dup:
+        # 弹窗已经点掉 ⇒ 主面板的「确定」位置没变，但**别再用被抓的旧帧** ✗
+        try:
+            _invalidate(b)
+        except Exception:                   # noqa: BLE001
+            pass
+        p = _find_text_btn(b, ('确定',), ymin=820, ymax=960)
+        at = (p[0], p[1]) if p else FORETELL['ok']
+        if _has(_items(b), FORETELL['title']):
+            bot.tap_dlg(at[0], at[1], wait=2.2)
+            log.append({'foretell': 'ok', 'at': list(at),
+                        'src': 'ocr' if p else 'fallback', 'after_dup': True})
+        else:
+            log.append({'foretell': 'ok_skipped_panel_gone'})
+    else:
+        p = _find_text_btn(b, ('确定',), ymin=820, ymax=960)
+        at = (p[0], p[1]) if p else FORETELL['ok']
+        bot.tap_dlg(at[0], at[1], wait=2.2)
+        log.append({'foretell': 'ok', 'at': list(at),
+                    'src': 'ocr' if p else 'fallback'})
     out['acts'] = ['pick%d' % len(pick), 'ok']
 
     # ⚠ 实测：**点确定后没有结果框**（与勇者之墓不同 ✓）⇒ 不需要关结果框

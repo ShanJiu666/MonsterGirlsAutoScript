@@ -94,6 +94,21 @@ KEEP_HOT_ZIPS = 5                       # 仓库配额有限，只留最近 5 �
 ASSET_DIRS = ('templates/fixed',)
 
 
+# ⭐⭐ 2026-10-19 **`_frames.json`（优选帧清单）也必须随热更发**（用户问：
+#   「这种优选帧别人用不了？」）
+#   ---- 为什么单独列 ----
+#     · `ASSET_DIRS` 只扫**一层**，而 `templates/unit/` 是**两层**
+#       （`unit/<code>/_frames.json`）⇒ 加进去也扫不到
+#     · 而且 `unit/` 下有**上万张 PNG（~24MB）**⇒ 绝不能整个塞进补丁
+#       （补丁一直号称 <1MB，这是它的价值所在 ✗）
+#   ---- 所以 ----
+#     用**精确白名单**：只发 `templates/unit/*/_frames.json`
+#     13 个 ≈ 36KB ⇒ 补丁仍远小于 1MB ✓
+#   ⚠ 缺了就"静默退回前 3 帧"（`spots._frame_picks()` 返回 None）⇒
+#     用户端看不到任何报错、只是特殊地块偶尔漏 ⇒ **最难查的那类** ✗
+HOT_EXTRA_GLOBS = ('templates/unit/*/_frames.json',)
+
+
 # ───────────────────────────── 小工具 ─────────────────────────────
 
 def die(msg):
@@ -278,6 +293,19 @@ def hot_assets():
             if not HU._pkg_rel_ok(rel):
                 die('资产 %s 被 `_pkg_rel_ok` 拒绝（不该发生，检查 ASSET_DIRS）' % rel)
             out.append(rel)
+    # ⭐ 2026-10-19 追加**两级目录**的白名单资产（`_frames.json`，见 HOT_EXTRA_GLOBS）
+    #   ⚠ 用 `glob` 而不是 `os.listdir`（要跨一层子目录）
+    #   ⚠ 缺文件**不报错**（未开放的地图本来就没有 `_frames.json` ✓）
+    import glob as _g
+    for pat in HOT_EXTRA_GLOBS:
+        for fp in sorted(_g.glob(os.path.join(ROOT, pat.replace('/', os.sep)))):
+            if not os.path.isfile(fp):
+                continue
+            rel = os.path.relpath(fp, ROOT).replace(os.sep, '/')
+            if not HU._pkg_rel_ok(rel):
+                die('资产 %s 被 `_pkg_rel_ok` 拒绝（检查 HOT_EXTRA_GLOBS）' % rel)
+            if rel not in out:
+                out.append(rel)
     return out
 
 

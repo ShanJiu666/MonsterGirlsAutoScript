@@ -135,7 +135,31 @@ class Problem:
         _obs_cells = set(getattr(self, 'obs_cells', None) or ())
         if _obs_cells:
             out = {c for c in out if c in _obs_cells}
+        # ⛔⛔⛔ 2026-10-19 **只有空地才是"揭示源"**（真机事故，用户两次指正）
+        #   ---- 用户原话 ----
+        #     ① 「打完 1,3 后不能直接点到 2,5，中间还有草地隔着呢」
+        #     ② 「3,3 和 1,3 都是**战斗格**」「**2,5 没有被点亮**」
+        #   ---- 数据表 ----
+        #     S10002_211 符文岩石 SpotSize=4 is_fight_spot=**True**  ← 3,3
+        #     S10002_104 简易图腾 SpotSize=2 is_fight_spot=**True**  ← 1,3
+        #     S10002_013 预言石碑            is_fight_spot=False     ← 2,5 target
+        #   ---- 游戏规则（用户确认）----
+        #     「**只有空地能连锁揭示**」⇒ 战斗格/内容格点完**不揭示邻格**
+        #   ---- 病 ----
+        #     原来 `for bi in state: out.update(cells_of[bi])` 把**所有点过的块**
+        #     都当"已消耗/已揭示源" ⇒ 打掉一个战斗格，它的邻格被判"已揭示"
+        #     ⇒ 2,5（雾）被误判可点 ⇒ 排进计划 ⇒ 真机打了两场架、2,5 依然灭着 ✗✗
+        #   ---- 修法 ----
+        #     只让 **plain（空地）** 当揭示源 ✓
+        #   ⚠ **上面 `board[c] < 0` 那行一个字不动** ——
+        #     那是"观测里本来就空的格"（真已消耗，含历史战斗格打掉后留下的空洞）
+        #     ⇒ 它必须继续算"已消耗"（否则已走过的地图看不见 ✓）
         for bi in state:
+            try:
+                if not self.blocks[bi].plain:
+                    continue            # 战斗格/内容格：不揭示邻格 ✗
+            except Exception:           # noqa: BLE001
+                pass                    # 判不了 ⇒ 按老行为（fail-open ✓）
             out.update(self.cells_of.get(bi, ()))
         return out
 

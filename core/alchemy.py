@@ -285,6 +285,49 @@ def start_alchemy(b, log, tag='alch'):
 # ══════════════════════════════════════════════════════════════════════
 # ④ 主流程
 # ══════════════════════════════════════════════════════════════════════
+def _clr_panel_if_any(b, log=None):
+    """**有面板才关**（没面板零副作用）⇒ True = 关掉了 / 本来就没有
+
+    ⛔ 2026-10-19 为什么不直接用 `GC.close_panel`：
+      ```python
+      def close_panel(b, at, tag, probe_texts=(), log=None, tries=2):
+          for k in range(tries):
+              b.tap(int(at[0]), int(at[1]), wait=1.8)   # ← **无条件点**
+              if not probe_texts:
+                  return True                            # ← 没 probe 直接算成功
+              items = ocr_items(...)                     # ← 点了才验证
+      ```
+      ⇒ 在**炼金层**（没有派遣面板）调它 = 往右上角 X **乱点一下** ✗
+      （那位置可能是别的 UI，不能赌）
+
+    ⇒ 这里改成"**先探测、在才点**"：
+      ① OCR 一帧，看到派遣面板文字才动手
+      ② 看不到 ⇒ 直接返回 True（什么都没碰 ✓）
+      ③ 点完**再验证一次**，如实写日志
+
+    ---- 它解决的真机事故 ----
+      用户：「**派遣面板还开着呢，没划到炼金界面**」
+      根因：`scroll_to_top` **只滚动不关面板**，而面板盖着时滑动被吃掉
+      ⇒ "以为到了 4 楼"，实际还在 2 楼 ⇒ 点宝箱全落在派遣面板上 ✗
+    """
+    try:
+        items = GC.ocr_items(b, tag='pre_alch_probe')
+    except Exception:                   # noqa: BLE001
+        return True
+    markers = ('黑晶女仆', '一键派遣', '派遣')
+    if not GC.has(items, *markers):
+        GC._log(log, {'alch': 'pre_scroll_no_panel'})
+        return True                     # 没面板 ⇒ 零副作用 ✓
+    GC._log(log, {'alch': 'pre_scroll_panel_found',
+                  'texts': GC._texts(items)[:8]})
+    say('   · 发现派遣面板还开着 ⇒ 先关掉（否则滚不动）✓')
+    ok = GC.close_panel(b, GC.TASK_PANEL_X, 'alch_pre_scroll',
+                        probe_texts=('黑晶女仆',), log=log)
+    if not ok:
+        say('   ⚠ 派遣面板没关掉 ⇒ 仍尝试往下走（可能失败）')
+    return ok
+
+
 def run(b, log=None, auto_start=False, leave=False, accel=False):
     """炼金主流程 ⇒ 汇总 dict
 
@@ -294,6 +337,22 @@ def run(b, log=None, auto_start=False, leave=False, accel=False):
     `auto_start=False` 时**绝不消耗任何道具** ✓
     """
     log = log if log is not None else []
+    # ⛔⛔ 2026-10-19 **必须把设备号登记给 `guild_common`**（真机事故：
+    #   用户报「**完全没有滑动**」，日志「滑了 8 次仍在椅子层」）
+    #   ---- 根因 ----
+    #     `guild_common.swipe_abs()` 走**裸 adb**，设备号来自 `_dev_of()`：
+    #         `_DEV_CUR['dev'] or MAPBOT_DEVICE or DEV(=127.0.0.1:16384)`
+    #     而 `_DEV_CUR['dev']` **只能由 `set_device()` 填**，
+    #     它只在 `wrap_dry(bot)` 里被调用 —— 那两处调用**都在 `main()` CLI 路径**
+    #     ⇒ 从 `explore_loop._guild_daily` 走**库调用**直进 `run()` 时
+    #        **一次都没登记** ⇒ 退到默认 `16384`
+    #     ⇒ 用户跑 16448，滑动却发到 16384（那台没游戏）⇒ **屏幕纹丝不动** ✗✗
+    #   ---- 修法 ----
+    #     入口就登记：`b.dev` 是 `GC.Bot` 的字段（`wrap_dry` 正是读它）✓
+    try:
+        GC.set_device(getattr(b, 'dev', None))
+    except Exception:                   # noqa: BLE001
+        pass
     res = {'ok': False, 'claimed': False, 'started': False, 'state': None}
     say('')
     say('=' * 62)
@@ -305,10 +364,37 @@ def run(b, log=None, auto_start=False, leave=False, accel=False):
         res['why'] = 'not_in_guild'
         return res
 
+    # ⛔⛔ 2026-10-19 **先关面板，再滚**（真机事故，用户原话：
+    #   「**派遣面板还开着呢，没划到炼金界面**」）
+    #   ---- 病（就一行代码）----
+    #     下面那句 `GC.scroll_to_top(b, log)` **只会滑动、不会关面板**
+    #     （它当时因为"谎报成功"被改成"只滚动不点击"，见它的 docstring）
+    #     而**面板盖着时滑动全部被面板吃掉** ⇒ 画面根本不动
+    #     ⇒ 于是"以为滚到 4 楼了"，实际还在 2 楼
+    #     ⇒ 接着按 4 楼的坐标去看宝箱 ⇒ 点在派遣面板的无意义位置
+    #     ⇒ 真机日志：`点 (240,445) ⇒ 没开出任何面板
+    #        （认到 ['PID:162332','Ver1.2.2.8','1680019',...]）` ← 只有 HUD 文字 ✗✗
+    #   ---- 修法 ----
+    #     `close_panel` 自己会"探测不到面板文本就不点"⇒ 没面板时零副作用 ✓
+    #     ⇒ 有面板先关掉，滚动才能生效 ✓
+    try:
+        _clr_panel_if_any(b, log)
+    except Exception as _epc:           # noqa: BLE001
+        GC._log(log, {'alch': 'pre_scroll_close_err', 'e': repr(_epc)[:120]})
+
     # ── 滚到顶楼（4 楼 = 炼金那层）──
     #   ⭐ 先固定滚 N 次（到顶后再滚无害），再用**候选点组**去点宝箱
     #     —— 宝箱的 y 会随滚动深度漂 ~35px，见 `ALCHEMY_CHEST_YS` 的说明 ✓
-    GC.scroll_to_top(b, log)
+    # ⛔ 2026-10-19 尊重返回值：滚不到顶 ⇒ **别在 2 楼点炼金坐标**（会点到椅子 ✗）
+    #   真机铁证：在 2 楼点 (240,445) 开出了「黑晶女仆」派遣面板 ✗
+    _topped = GC.scroll_to_top(b, log)
+    if not _topped:
+        say('   ✗ 滚不到顶楼（仍在椅子层）⇒ **放弃炼金**，不乱点坐标')
+        GC._log(log, {'alch': 'giveup_not_topped'})
+        res['why'] = 'not_topped'
+        if leave:
+            GC.leave_guild(b, log)
+        return res
 
     # ── 点宝箱（正式进入流程）：**试一组候选点**，试到开出面板为止 ──
     #   ⚠⚠ 2026-10-14 真机教训：**必须验证"点出面板了没"**，否则会

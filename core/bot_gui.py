@@ -50,7 +50,39 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PY = sys.executable
+
+
+def _pick_python():
+    """选子进程解释器（三级回退，越靠前越对）
+
+    ⛔ 2026-10-19 真机事故：`PY = sys.executable` 在**用户机器上不可用**
+      现象（用户：「关于/更新里的检查更新和立即更新怎么点了没反应？」）：
+        点按钮 → subprocess.run([PY, HOT_PY, mode]) 立刻抛 FileNotFoundError
+        → 被 except 吞掉、只 bgq.put('失败：…') → 写进滚动日志、用户看不到
+        → 感觉"点了没反应" ✗
+      为什么：开发机上 sys.executable 是
+        C:/Users/PC/.workbuddy/binaries/python/envs/mapbot/Scripts/python.exe
+        这个路径**只在我的机器上存在**，发布包里没有 ✗
+      修法：
+        ① 包内 python311/python.exe —— 发布包结构固定，最可靠
+        ② sys.executable —— 开发机 / 被正确 python 拉起时对得上
+        ③ 都没有 → 返回空串，调用方弹窗报错（不再静默）
+    """
+    cands = [
+        os.path.join(HERE, 'python311', 'python.exe'),
+        os.path.join(HERE, 'python311', 'bin', 'python3'),
+        sys.executable,
+    ]
+    for c in cands:
+        try:
+            if c and os.path.isfile(c):
+                return c
+        except Exception:               # noqa: BLE001
+            continue
+    return ''
+
+
+PY = _pick_python() or sys.executable
 # ⭐ 2026-10-02：adb 改走 `paths.py` 自动探测（原来写死本机 SDK 路径，
 #   朋友机器上必然不存在 ⇒ 连「环境检查」都过不去）。
 #   `P.ADB` 是**惰性**的：只有真正被当 argv 用时才付探测代价，不拖慢 GUI 启动。
@@ -1606,11 +1638,14 @@ class App:
         tab = self.nb.add('工具')
         bar = ctk.CTkFrame(tab, fg_color='transparent', corner_radius=0)
         bar.grid(row=0, column=0, sticky='w', padx=theme.PAD_TAB, pady=(theme.PAD_TAB, 4))
+        # ⛔ 2026-10-19 **删两颗按钮**（用户要求）
+        #   · 「扫当前屏（标定用）」= 开发标定工具，发布版不需要
+        #   · 「多开一个新号」= 用户明确要去掉（多开直接再双击一次程序即可）
+        #   ⚠ 底层方法 `scan_screen` / `spawn_multi` **保留不动**
+        #     （别处仍可能调用；删方法会 NameError ✗ 只删入口按钮）
         for text, fn in (('环境检查', self.check),
                          ('打开日志目录', self.open_logs),
-                         ('扫当前屏（标定用）', self.scan_screen),
-                         ('检查重复循环', self.dedupe_loops),
-                         ('多开一个新号', self.spawn_multi)):
+                         ('检查重复循环', self.dedupe_loops)):
             ctk.CTkButton(bar, text=text, height=30, corner_radius=8, font=ctk_theme.font(ctk_theme.FS_SUB),
                           fg_color=_p['card2'], hover_color=_p['card'],
                           text_color=_p['text'], border_width=1,
@@ -2219,9 +2254,28 @@ class App:
         except Exception:           # noqa: BLE001
             pass
     def _paint_plan(self):
-        """把当前计划刷进「计划」行 + 棋盘序号（**只重画棋盘，不重读文件** ✓）"""
+        """把当前计划刷进「计划」行 + 棋盘序号（**只重画序号层，不重读文件** ✓）
+
+        ⛔ 2026-10-19 用户：「**当前状态里的步数蓝色圆图标为什么一直闪**」
+          ---- 病 ----
+            原来这里调 `_update_board()` ⇒ 画布 `delete('all')` + **全量重画**
+            ⇒ 序号圆被抹掉再画 ⇒ 一直闪 ✗
+          ---- 修法 ----
+            改调 `board.paint_order()`（**只删 `seq` tag + 重画序号**）✓
+            兜底：老版画布没这方法 ⇒ 退回 `_update_board()`（宁可闪也别崩 ✓）
+        """
         try:
-            self._update_board()
+            _snap = getattr(self, '_board_frozen', None) or {}
+            _board = _snap.get('board') or {}
+            _plan = (_snap.get('plan_full') or {}) if isinstance(_snap, dict) else {}
+            if not _plan.get('order'):
+                _plan = getattr(self, '_live_plan', None) or {}
+            _order = list(_plan.get('order') or [])
+            _fn = getattr(self.board, 'paint_order', None)
+            if _fn is not None:
+                _fn(order=_order, board=_board, spans=self._spans_of(_board))
+            else:
+                self._update_board()       # 兜底：老画布
         except Exception as e:      # noqa: BLE001
             try:
                 self.log('（计划上屏失败：%r）' % (e,))
@@ -2663,10 +2717,16 @@ class App:
         except Exception:               # noqa: BLE001
             _sne = None
         _sid_now = None
+        _t0_now = None
         if isinstance(_sne, dict):
             try:
+                # ⭐ 2026-10-19 `t0` = 该图开始时刻（`explore_loop` 写入）⇒ **一图一值**
+                #   连刷同名地图时，图名/格数/键集合可能完全一样（实测 4 张全同 ✗）
+                #   但 `t0` 必然不同 ⇒ 这是**唯一可靠的跨图信号** ✓
+                _t0_now = _sne.get('t0')
                 _sid_now = (str(_sne.get('mapname') or ''),
-                            tuple(sorted(str(k) for k in (_sne.get('board') or {}))))
+                            tuple(sorted(str(k) for k in (_sne.get('board') or {}))),
+                            _t0_now)
             except Exception:           # noqa: BLE001
                 _sid_now = None
         _sid_prev = getattr(self, '_board_snap_id', None)
@@ -3778,6 +3838,20 @@ class App:
                     self.bgq.put('⚠ 已回滚 ⇒ 请**关掉本窗口重新双击启动**才生效 ✓')
             except Exception as e:      # noqa: BLE001
                 self.bgq.put('   ✗ 失败：%r' % (e,))
+                # ⛔ 2026-10-19 失败必须让用户**看见**（真机事故：只进日志 ⇒
+                #   用户报"点了没反应"，我查半天才发现是 PY 路径不对）
+                try:
+                    messagebox.showerror(
+                        '更新操作失败',
+                        '跑 hotupdate.py %s 失败：' % mode
+                        + chr(10) + chr(10) + repr(e)
+                        + chr(10) + chr(10) + '用的解释器：'
+                        + chr(10) + PY
+                        + chr(10) + chr(10)
+                        + '（检查该文件是否存在；发布包里应是 python311/python.exe）',
+                        parent=self.root)
+                except Exception:       # noqa: BLE001
+                    pass
             self.bgq.put(('done', mode))
         threading.Thread(target=work, daemon=True).start()
 

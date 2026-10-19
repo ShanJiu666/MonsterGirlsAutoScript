@@ -2313,6 +2313,10 @@ def check_newequip_after_battle(b, log, where, wait=0.5):
     return False
 
 
+#: flush 的写盘序号（让 tmp 文件名唯一，见 flush 内注释）
+_FLUSH_SEQ = 0
+
+
 def flush(log):
     # ⭐ v1.12：把最新日志挂到模块全局 ⇒ `dump_summary()` 能把它抄一份到**公共目录**
     #   （release 包不可 run-as，私有 runs/ 拿不出来；朋友的手机只能靠这个文件回传 ✓）
@@ -2323,10 +2327,61 @@ def flush(log):
         pass
     try:
         import json
-        with open(LOG_PATH, 'w', encoding='utf-8') as f:
+        # ⛔⛔ 2026-10-19 **原子替换**（真机事故：GUI 撞上半截文件 ⇒ 棋盘落后一张）
+        #   ---- 病 ----
+        #     `open(LOG_PATH, 'w')` 会**先把文件截断**，再 json.dump（~200KB，几十 ms）
+        #     而 GUI 每 2 秒 poll 一次、且用 **mtime/size 指纹**判"变了没"
+        #     ⇒ 截断瞬间 size 变小 ⇒ 指纹变 ⇒ **立刻去解析半截文件**
+        #     ⇒ 真机日志：`JSONDecodeError('Expecting property name enclosed in double qu…')`
+        #     ⇒ `LoopLogTail.poll()` 解析失败时**保留上次 events**
+        #     ⇒ 棋盘停在**上一张图** ✗✗（用户报："实时棋盘用的上一张图的"）
+        #   ---- 修法 ----
+        #     ① 先写同目录的 `.tmp`（此时正式文件**完好无损**）
+        #     ② `os.replace()` 一次性换名（Windows/POSIX 都是**原子**的 ✓）
+        #     ⇒ 读侧要么看到**旧完整文件**、要么看到**新完整文件**，绝无半截 ✓
+        # ⚠⚠ **tmp 名必须唯一**（压力测试抓到的：固定名会互相截断 → 8 次半截）
+        #   · 固定 `.tmp` 时，上一轮还没 replace 掉、下一轮又 open('w') 截断它
+        #     ⇒ 正在被换名的那个 tmp 内容被改 ⇒ 读侧读到半截 ✗
+        #   ⇒ 带 pid + 单调计数 ⇒ 每次写都是独立文件 ✓
+        #   ⇒ `os.replace` 换走后 tmp 就不存在了，不会堆积 ✓
+        global _FLUSH_SEQ
+        try:
+            _FLUSH_SEQ = int(_FLUSH_SEQ) + 1
+        except Exception:                   # noqa: BLE001
+            _FLUSH_SEQ = 1
+        _tmp = '%s.tmp.%d.%d' % (LOG_PATH, os.getpid(), _FLUSH_SEQ)
+        with open(_tmp, 'w', encoding='utf-8') as f:
             json.dump(log, f, ensure_ascii=False, indent=1)
+        # ⚠ **Windows 上 `os.replace` 会被读侧挡住**（实测 WinError 5 拒绝访问）
+        #   原因：Windows 的 MoveFileEx 要对目标文件有写权限，
+        #        而 GUI 正以只读方式打开它 ⇒ 失败（POSIX 没这问题）
+        #   ⇒ 短重试 5 次 × 20ms（读侧关闭句柄后就成功了 ✓）
+        _rep_ok = False
+        for _k in range(5):
+            try:
+                os.replace(_tmp, LOG_PATH)
+                _rep_ok = True
+                break
+            except Exception:               # noqa: BLE001
+                try:
+                    time.sleep(0.02)
+                except Exception:           # noqa: BLE001
+                    pass
+        if not _rep_ok:
+            # 全失败 ⇒ 别把 tmp 留着发霉，也别不落盘 ✗
+            try:
+                os.remove(_tmp)
+            except Exception:               # noqa: BLE001
+                pass
+            raise IOError('os.replace 重试 5 次仍失败')
     except Exception:
-        pass
+        # ⚠ 兜底：原子替换失败（权限/磁盘满/跨盘）⇒ 退回老写法，**不能因此不落盘** ✗
+        try:
+            import json as _js_f
+            with open(LOG_PATH, 'w', encoding='utf-8') as f:
+                _js_f.dump(log, f, ensure_ascii=False, indent=1)
+        except Exception:
+            pass
     # ⭐ 统计**边跑边落盘**：这样即使被「停止」（taskkill /F 杀进程）也能拿到最新总结
     dump_summary()
 
@@ -8130,7 +8185,12 @@ def final_collect(b, log, st):
     if _is_foretell_panel(it):
         say('       · 退图前补点弹出「预言石碑」⇒ **领掉**（不关掉 ✓）')
         try:
-            buypanels.foretell_flow(b, log)
+            buypanels.foretell_flow(
+            # ⛔ 2026-10-19 **必须传 flags**（原来这两处没传 ⇒ `flags=None` ⇒
+            #   判停用默认 True、优先逻辑用默认 False ⇒ 两边矛盾 ✗）
+            b, log, flags={'stop_peace_metal': STOP_PEACE,
+                           'stop_elem_purple': STOP_ELEM_PURPLE,
+                           'stop_elem_orange': STOP_ELEM_ORANGE})
         except Exception as _fe5:      # noqa: BLE001
             log.append({'foretell': 'collect_flow_error', 'e': repr(_fe5)[:100]})
         return _fc_done(1)
@@ -8250,7 +8310,12 @@ def final_collect(b, log, st):
         elif _is_foretell_panel(_it3):
             say('       · 退图前补点弹出「预言石碑」⇒ **领掉**（不关掉 ✓）')
             try:
-                buypanels.foretell_flow(b, log)
+                buypanels.foretell_flow(
+            # ⛔ 2026-10-19 **必须传 flags**（原来这两处没传 ⇒ `flags=None` ⇒
+            #   判停用默认 True、优先逻辑用默认 False ⇒ 两边矛盾 ✗）
+            b, log, flags={'stop_peace_metal': STOP_PEACE,
+                           'stop_elem_purple': STOP_ELEM_PURPLE,
+                           'stop_elem_orange': STOP_ELEM_ORANGE})
             except Exception as _fe6:      # noqa: BLE001
                 log.append({'foretell': 'collect3_flow_error', 'e': repr(_fe6)[:100]})
             _hit3 = True
@@ -10240,7 +10305,20 @@ def one_round(b, log, rnd, prefix, st):
                                 'mapname': st.get('mapname') or ''})
             if _snap_ok:
                 st['_snap_done'] = True
+                # ⭐⭐⭐ 2026-10-19 **加 `t0`（本图开始时刻）当"图身份"**
+                #   ---- 为什么必须加（真机事故）----
+                #     用户报：「实时棋盘用的上一张图的，规划用的现在这张图的」
+                #     实测 4 张连刷图的快照：mapname 全是"幽暗密林"、格数全是 35、
+                #     键集合完全一样 ⇒ **指纹完全相同** ⇒ GUI 判不出"换图了"
+                #     ⇒ `_board_frozen` 永不清 ⇒ 棋盘永远停在第 1 张 ✗
+                #     而 `_live_plan` 来自 stdout（每图刷新）⇒ 棋盘旧 + 规划新 = 错位 ✗✗
+                #   ---- 为什么用 `t0` ----
+                #     `st` 是**每图一份**新建 dict ⇒ 它的创建时刻天然"一图一值" ✓
+                #     比"图名/格数/键集合"强得多（那些在连刷同图时会重复）
+                #   ⚠ 取 `st.get('t0')`（若有）；没有就用当前时间（仍每图不同 ✓）
+                _bs_t0 = st.get('t0') or st.get('_t0') or time.time()
                 _bs_rec = {'board_snapshot': True, 'snap_round': rnd,
+                           't0': round(float(_bs_t0), 3),
                            'mapname': st.get('mapname') or '', 'board': _bs}
                 if _bsm:
                     _bs_rec['marks'] = _bsm
@@ -12675,6 +12753,34 @@ def _guild_daily(b, log):
     else:
         say('   · 没勾「派遣任务」⇒ 跳过')
 
+    # ⛔⛔ 2026-10-19 **派遣 → 炼金之间必须清一次面板**（真机事故）
+    #   ---- 用户原话 ----
+    #     「**派遣面板还开着呢，没划到炼金界面**」
+    #   ---- 真机日志 ----
+    #     `点 (240,445) ⇒ 没开出任何面板（认到 ['PID:162332','Ver1.2.2.8',...]）`
+    #     ⇒ 那一帧只有主页 HUD ⇒ **面板还盖着**，炼金在面板上点空坐标 ✗
+    #   ---- 为什么派遣完面板还在 ----
+    #     · `guild_tasks.run(leave=False)` **不退出公会**（按设计 ✓）
+    #     · `ensure_chair_floor()` 会"点椅1试层"，正常会 `close_panel`，
+    #       但只要有一条路径没关成功（动画中 / OCR 没读到关钮）⇒ 面板留在屏上
+    #     · **4 把椅子全 running** 时 `chair_timers` 直接 `continue`（不点椅子）
+    #       ⇒ **没人负责关那个"试层"留下的面板** ✗
+    #   ⇒ 这里显式清一次：`close_panel` 内部会多点几次 + probe 文本自证 ✓
+    if _guild_entered and _do_alch:
+        try:
+            import guild_common as _gc0
+            # ⚠ **先探测再点**（`close_panel` 是无条件 tap ⇒ 没面板时会乱点 ✗）
+            _it0 = _gc0.ocr_items(b, tag='gd_pre_alch_probe')
+            if _gc0.has(_it0, '黑晶女仆', '一键派遣', '派遣'):
+                _gc0.close_panel(b, _gc0.TASK_PANEL_X, 'gd_before_alch',
+                                 probe_texts=('黑晶女仆',), log=log)
+                say('   · 派遣面板还开着 ⇒ 已关闭（准备上 4 楼炼金 ✓）')
+            else:
+                say('   · 派遣结束、无残留面板 ⇒ 直接上 4 楼炼金 ✓')
+        except Exception as _e0:        # noqa: BLE001
+            log.append({'guild_daily': 'pre_alch_clear_err',
+                        'e': repr(_e0)[:120]})
+
     # ② 炼金（4 楼顶楼）—— **只在勾了「炼金」时做** ✓
     #   ⚠ 勾了就 `auto_start=True`（投满星）—— 这正是那颗勾选的语义 ✓
     #     （用户 2026-10-14 明确要的：「自动投满星开炼（会消耗装备）」）
@@ -13373,11 +13479,33 @@ def run_maps(a):
     #   ---- 失败了怎么办 ----
     #     **绝不能影响收尾**：整段包 try/except，出错只记日志、继续往下走 ✓
     #     （本项目铁律：收尾阶段任何异常都不许把整局带崩 ✗）
+    # ⛔⛔ 2026-10-19 **只在"因为体力停止"时才做收工日常**（用户口径）
+    #   ---- 用户原话 ----
+    #     「立即停止后怎么去做日常了。日常招募免广这些**只在因为体力停止才触发**」
+    #   ---- 病 ----
+    #     旧判据只有 `STATS.get('maps')`（跑过图就做）⇒ 完全不看**为什么停** ✗
+    #     真机：抽到「元素·紫色」⇒ `foretell_stop` 停下 ⇒ `maps=1`
+    #     ⇒ **照样去跑公会日常/招募/免广** ✗✗（用户现场：面板还留着呢）
+    #   ---- 修法（白名单，不用黑名单）----
+    #     ① `stopped` 含「体力」⇒ 做（唯一该做的情况 ✓）
+    #     ② `stopped` **为空** ⇒ 也做（正常跑完所有张 = 体力自然耗尽 ✓）
+    #     ③ 其余一律跳过（含：用户停止 / 红装 / 预言石碑 / 顶号 / 崩溃 /
+    #        认不出棋盘 / 计划走不下去 / 退图失败 / 到点自动停 …）
+    #     ⚠ 用白名单而不是枚举黑名单 —— 以后**新增停止原因时默认不做日常**
+    #       （fail-closed ✓ 与"判据宁可保守"的既有原则一致）
+    _stop_why_daily = str(STATS.get('stopped') or '').strip()
+    _ok_daily = (bool(STATS.get('maps'))
+                 and (_stop_why_daily == '' or '体力' in _stop_why_daily))
     try:
-        if STATS.get('maps'):
-            _guild_daily(b, log)
-        else:
+        if not STATS.get('maps'):
             say('   · 这局一张图都没跑完 ⇒ 跳过公会日常（派遣/炼金）')
+        elif not _ok_daily:
+            say('   · 停止原因「%s」不是"体力用尽" ⇒ **跳过收工日常**'
+                '（公会日常/免费招募/免广告都不碰 ✓）' % _stop_why_daily)
+            log.append({'guild_daily': 'skip_not_stamina',
+                        'why': _stop_why_daily})
+        else:
+            _guild_daily(b, log)
     except Exception as _e_gd:      # noqa: BLE001
         import traceback as _tb_gd
         log.append({'guild_daily': 'error', 'e': repr(_e_gd)[:160],
