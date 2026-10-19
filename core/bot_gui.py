@@ -2670,9 +2670,26 @@ class App:
             except Exception:           # noqa: BLE001
                 _sid_now = None
         _sid_prev = getattr(self, '_board_snap_id', None)
-        _new_map = ((_mn_now and _mn_prev and _mn_now != _mn_prev)
-                    or (_sid_now is not None and _sid_prev is not None
-                        and _sid_now != _sid_prev))
+        # ⛔⛔ 2026-10-19 **放宽换图判据**（真机事故：用户「还是没变化啊」）
+        #   ---- 旧判据 ----
+        #     `_new_map = (图名变 and 两个都非空) or (快照指纹变 and 两个都非 None)`
+        #   ---- 为什么它会失效 ----
+        #     首次运行 `_board_snap_id` 是 `None` ⇒ 第二条恒 False ✗
+        #     `_mn_prev` 为空（上次没读到图名）⇒ 第一条也恒 False ✗
+        #     ⇒ **`_new_map` 恒 False ⇒ `_board_frozen` 永不清空**
+        #     ⇒ 棋盘一直停在**上一次运行**的图上（用户看到"没变化"）✗✗
+        #   ---- 修法（三重，任一命中就清）----
+        #     ① `mapname` 与**上次记住的**不同（不要求 `_mn_prev` 非空）
+        #     ② `board_snapshot` 的图名与**冻结快照自带图名**不同
+        #     ③ 快照指纹不同（原逻辑保留，作为补充 ✓）
+        _frozen_mn = (self._board_frozen or {}).get('mapname') \
+            if isinstance(getattr(self, '_board_frozen', None), dict) else None
+        _new_map = (
+            (_mn_now and _mn_now != (_mn_prev or ''))
+            or (_mn_now and _frozen_mn and _mn_now != _frozen_mn)
+            or (_sid_now is not None and _sid_prev is not None
+                and _sid_now != _sid_prev)
+        )
         if _new_map:
             self._board_frozen = None   # 换了图 ⇒ 重新取首帧 ✓
             self._plan_frozen = False
@@ -2704,6 +2721,8 @@ class App:
                                        else None) or marks or {}),
                         'hud': dict(self.looplog.hud or {}),
                         'plan_full': dict(getattr(self.looplog, 'plan_full', None) or {}),
+                        # ⭐ 2026-10-19 记下"这份快照属于哪张图" ⇒ 换图能立刻发现 ✓
+                        'mapname': str((_full or {}).get('mapname') or _mn_now or ''),
                     }
                     _snap = self._board_frozen
                 except Exception:       # noqa: BLE001
@@ -2844,15 +2863,72 @@ class App:
         out = []
         if not isinstance(board, dict) or not board:
             return out
-        try:
-            name = self.looplog.mapname
-            if not name:
+        # ⭐⭐⭐ 2026-10-19 **自带 `cells` 直接展开**（最优先，且**完全不依赖图名/图码**）
+        #   ---- 为什么必须这条 ----
+        #     · 用户报：「多格战斗格子只显示一格」；而 `board_snapshot` 实测
+        #       `mapname=''`（进图首帧很常见）⇒ 老路径 `if not name: return []` ✗
+        #     · **sid 后缀反推 code 不可靠**：`001`/`101`/`002` 这些后缀
+        #       **在多张地图里都存在** ⇒ 实测把 S50001 反推成 S00001（命中 8/8 也是错的）✗
+        #     · 而 `explore_loop` 现在**把 `cells` 直接写进 board 值的第 5 项** ✓
+        #   ⇒ 有 cells 就用它：不查图名、不查图码、不算 cells_of，**零歧义** ✓
+        _self_cells = 0
+        for _v in board.values():
+            if isinstance(_v, (list, tuple)) and len(_v) >= 5 \
+                    and isinstance(_v[4], (list, tuple)) and len(_v[4]) > 1:
+                _self_cells += 1
+        if _self_cells:
+            for _k, _v in board.items():
+                _rc = self._rc_of(_k)
+                if _rc is None or not isinstance(_v, (list, tuple)) or len(_v) < 5:
+                    continue
+                try:
+                    _cells = [(int(_a), int(_bb)) for _a, _bb in _v[4]]
+                except Exception:           # noqa: BLE001
+                    continue
+                _cells = [(a, bb) for a, bb in _cells
+                          if 1 <= a <= self.board.ROWS and 1 <= bb <= self.board.COLS]
+                if len(_cells) > 1:
+                    # ⚠ 同一个块只加一次（多个成员格会给出同一份 cells）
+                    if not any(tuple(sorted(_cells)) == tuple(sorted(_c))
+                               for _a0, _c in out):
+                        out.append((_rc, _cells))
+            if out:
                 return out
-            code = self._spot_codes.get(name)
-            if code is None:
-                import spots
-                code = spots.code_of(name) or ''
-                self._spot_codes[name] = code
+        try:
+            # ⛔⛔ 2026-10-19 **图名读不到时也要展开多格块**（真机事故）
+            #   用户报：「就是多格战斗格子只显示一格」
+            #   ---- 病 ----
+            #     原来 `name = self.looplog.mapname; if not name: return out`
+            #     ⇒ 进图首帧 `mapname` 常为空（`board_snapshot` 实测就是 `''`）
+            #     ⇒ `spans=[]` ⇒ 多格地块（遗迹石碑/白骨/巨大沙堡…）只填锚点 1 格 ✗✗
+            #   ---- 修法：三条回退（越靠前越准）----
+            #     ① 图名 → code（原逻辑）
+            #     ② **board 里的 sid 后缀反推 code**（拿任意一格的值当线索，
+            #        找哪个 code 真有这个 sid）⇒ 与 `board_state` 里
+            #        `_disambiguate_map` 同思路（**用数据说话，不猜**）✓
+            #     ③ 全失败 ⇒ 返回 []（退回老行为，绝不抛 ✓）
+            name = self.looplog.mapname
+            code = ''
+            if name:
+                code = self._spot_codes.get(name)
+                if code is None:
+                    import spots
+                    code = spots.code_of(name) or ''
+                    self._spot_codes[name] = code
+            # ⛔⛔ 2026-10-19 **不做"sid 后缀反推 code"**（实测会造出假块）
+            #   ---- 为什么禁掉 ----
+            #     曾试：图名空时用 board 里的 sid 后缀去反推哪张地图有这些 sid。
+            #     实测（真机帧 r_133733，实际 S50001 荒凉戈壁）：
+            #       反推结果 = **S00001**（"命中 8/8" 也是错的 —— 后缀 `001/101/002`
+            #       **在多张地图里都存在**，命中数是巧合，不是证据）
+            #       ⇒ 用 S00001 的 `cells_of` 去展开 ⇒ **12 个块里 7 个是假的** ✗✗
+            #     ⇒ 判据原则（本项目一贯）：「**宁可没有，也别画假块**」✓
+            #   ---- 现在还剩两条可靠路径 ----
+            #     ① **board 自带 `cells`**（`explore_loop` 新写的第 5 项）—— 最准，已在上面处理
+            #     ② 图名能读到 ⇒ `code_of(name)` → `cells_of(sid, rc)` ✓
+            #   两条都拿不到 ⇒ 返回 []（只画锚点格，退回老行为 ✓ **不猜**）
+            if not code:
+                return out
             b = self._spot_board(code)
             if b is None:
                 return out
@@ -2880,11 +2956,20 @@ class App:
                     _sc = 1.0           # 读不出分 ⇒ **不拦**（保守 ✓）
                 if _sc < SPAN_SCORE_MIN:
                     continue
-                sid = '%s_%s' % (code, str(v[0] or '').strip())
-                try:
-                    cells = [(int(r), int(c)) for r, c in b.cells_of(sid, rc)]
-                except Exception:       # noqa: BLE001
-                    continue
+                # ⭐ 2026-10-19 若 board 值自带 `cells`（第 5 项，explore_loop 新写的）
+                #   ⇒ **直接用它**（最准最快，连 `cells_of` 都不用算 ✓）
+                cells = None
+                if len(v) >= 5 and isinstance(v[4], (list, tuple)) and v[4]:
+                    try:
+                        cells = [(int(_a), int(_bb)) for _a, _bb in v[4]]
+                    except Exception:       # noqa: BLE001
+                        cells = None
+                if cells is None:
+                    sid = '%s_%s' % (code, str(v[0] or '').strip())
+                    try:
+                        cells = [(int(r), int(c)) for r, c in b.cells_of(sid, rc)]
+                    except Exception:       # noqa: BLE001
+                        continue
                 cells = [(r, c) for r, c in cells
                          if 1 <= r <= self.board.ROWS and 1 <= c <= self.board.COLS]
                 if len(cells) > 1:

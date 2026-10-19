@@ -84,6 +84,11 @@ INSTANCE_DEV = DEV      # 该实例绑定的模拟器 adb 设备号
 _BOT = None             # 当前 Bot（统计要读它的耗时埋点）
 
 
+
+#: `board_snapshot` 最少要有多少格才写（见下方"两道闸"注释）
+#:  实测正常盘 21~29 格；只有 2~5 格的必然是"进图首帧没扫全" ⇒ 不写 ✓
+_SNAP_MIN = 12
+
 def say(msg):
     if VERBOSE:
         try:
@@ -1415,9 +1420,24 @@ def _cells_for_model(st, c, log=None, tag='solver', mark_revealed=True,
                     _sid_now = str(_vv.get('sid') or '')
                     _sids3 = {str(t[1]) for t in _tp3 if len(t) >= 2}
                     _sc_now = float(_vv.get('score') or 0)
+                    # ⛔⛔ 2026-10-19 **必须先确认"用户勾选了它"**（真机事故）
+                    #   用户报：「为什么点14？」⇒ 计划第一步 `1,4` 是「勇者之墓」，
+                    #   而他的 `target_types.json` 里**勇者之墓根本没勾**
+                    #   ⛔ 根因：这段兜底**只判了"当前不是目标"**（`if not _vv.get('target')`）
+                    #     就置 `target=True` ⇒ **把用户的勾选意愿整个覆盖掉** ✗
+                    #   ⇒ 兜底只该解决"**识别分数不够**"（采样不全），
+                    #     **绝不能改变"用户要不要它"** ✓
+                    #   `tcfg_mod.enabled(name)` = 用户勾选状态（与 `is_blocked` 互为取反）
+                    _nm_now = str(_vv.get('name') or '')
+                    _user_want = True
+                    try:
+                        _user_want = bool(tcfg_mod.enabled(_nm_now))
+                    except Exception:           # noqa: BLE001
+                        _user_want = False      # 判不了 ⇒ 不兜底（fail-closed ✓）
                     if (len(_tp3) >= 2 and len(_sids3) == 1
                             and _sid_now in _sids3
-                            and str(_vv.get('name') or '') in tcfg_mod.SPECIAL_NAMES
+                            and _nm_now in tcfg_mod.SPECIAL_NAMES
+                            and _user_want
                             and _sc_now >= tcfg_mod.SPECIAL_SCORE_MIN):
                         _vv['target'] = True
                         if log is not None:
@@ -1738,8 +1758,21 @@ def solver_order(st, c, log=None, max_steps=6, out=None):
 
 
 def board_for(mapname=None, code=None):
-    """取该图的地块分类器（mapname/code 二选一；失败返回 None）"""
-    code = code or spots_mod.code_of(mapname or '夏日海滩')
+    """取该图的地块分类器（mapname/code 二选一；失败返回 None）
+
+    ⛔⛔ 2026-10-19 **不许再兜底「夏日海滩」**（真机事故，用户：
+      「计划还是错的，实时棋盘也还是错的」）
+      ---- 原代码 ----
+          code = code or spots_mod.code_of(mapname or '夏日海滩')
+      ---- 为什么是灾难 ----
+        `mapname=None`（图名还没读到，进图首帧很常见）⇒ 兜底成 S00003 夏日海滩
+        ⇒ 用**别的图**的模板分类本图 ⇒ 整盘地块名全错（实测：
+          荒凉戈壁被认成「游乐设施 12 / 海边杂物 9 / 海边小屋 4 / 椰树 2」，
+          分数 0.3~0.7）⇒ 计划按错棋盘算 ⇒ 点序全错 ✗✗
+      ---- 现在 ----
+        拿不到 code ⇒ **返回 None**，由 `board_state` 走"实测消歧"（用真帧说话）✓
+    """
+    code = code or (spots_mod.code_of(mapname) if mapname else None)
     if not code:
         return None
     if code not in _BOARDS:
@@ -1845,16 +1878,29 @@ def _disambiguate_map(img, mapname, cands, log=None):
 def board_state(img, mapname=None, code=None):
     """整盘状态 -> {(r,c): {...}}；失败返回 {}（调用方退回旧的启发式）"""
     # ⭐⭐ 2026-10-01：图名有歧义时**用真实帧实测消歧**（按图名缓存 ✓）
-    if code is None and mapname:
-        code = _CODE_DECIDED.get(mapname)
+    # ⭐⭐⭐ 2026-10-19 **图名读不到也要消歧**（不能兜底成某张固定的图）
+    #   真机事故：`mapname=None` ⇒ 旧代码兜底夏日海滩 ⇒ 整盘地块名全错 ✗
+    #   ⇒ 现在：mapname 空 ⇒ 用「全部 code」当候选，**拿真帧实测挑最好的** ✓
+    #   ⚠ 只在图名空时做（有图名时仍走精确/模糊匹配，省时间 ✓）
+    #   ⚠ 结果按 `mapname or ''` 缓存 —— 空图名也缓存，同一张图不重复消歧 ✓
+    _mk = mapname or ''
+    if code is None:
+        code = _CODE_DECIDED.get(_mk)
         if code is None:
-            _cands = _candidate_codes(mapname)
+            _cands = _candidate_codes(mapname) if mapname else []
+            if not _cands:
+                # 图名空/认不出 ⇒ 全部 code 当候选（用真帧选）
+                try:
+                    _cands = sorted(set(spots_mod.map_table().values()))
+                except Exception:           # noqa: BLE001
+                    _cands = []
             if len(_cands) > 1:
-                code = _disambiguate_map(img, mapname, _cands, log=None)
+                code = _disambiguate_map(img, mapname or '（图名未读到）',
+                                         _cands, log=None)
             elif _cands:
                 code = _cands[0]
             if code:
-                _CODE_DECIDED[mapname] = code
+                _CODE_DECIDED[_mk] = code
     bd = board_for(mapname, code)
     if bd is None:
         return {}
@@ -10147,14 +10193,53 @@ def one_round(b, log, rnd, prefix, st):
     #     ⚠ 其余 flush 点**一个都不动**（"每张图结束才全量落盘"的既有节奏不变 ✓）
     if not st.get('_snap_done'):
         try:
-            st['_snap_done'] = True
-            _bs = {('%d,%d' % k): (str(v.get('sid') or '').split('_')[-1],
-                                   v.get('name'), v.get('score'), v.get('ratio'))
-                   for k, v in sorted((c.get('st') or {}).items())
-                   if v.get('anchor') == k}
+            # ⛔⛔ 2026-10-19 **保留全部格，别再按 anchor 过滤**（真机事故）
+            #   用户报：「就是多格战斗格子只显示一格」
+            #   ---- 病 ----
+            #     原来 `if v.get('anchor') == k` 只收"自己是锚点"的格 ✗
+            #     而多格地块（遗迹石碑/白骨/枯木…占 2~4 格）在 `state()` 里
+            #     **每一格都有一条**（同 sid 同 score，`anchor` 指锚点、`cells` 列全部格）
+            #     真机实测：35 格里 **27 个锚点 + 8 个非锚点**
+            #     ⇒ 快照只写 27 格 ⇒ GUI 少画 8 格 ⇒ "多格战斗格只显示一格" ✗✗
+            #   ---- 修法 ----
+            #     收**全部格**（与 `round` 事件的 `board` 口径一致 —— 那条一直是全格的 ✓）
+            #     并在值里带上 `cells`（第 5 项），GUI 若需要"这是多格块"可直接读 ✓
+            #   ⚠ 兼容：前 4 项 `(sid末段, name, score, ratio)` 顺序**不变** ✓
+            _bs = {}
+            for k, v in sorted((c.get('st') or {}).items()):
+                try:
+                    _cells_v = [list(map(int, x)) for x in (v.get('cells') or [])]
+                except Exception:           # noqa: BLE001
+                    _cells_v = []
+                _bs['%d,%d' % k] = (str(v.get('sid') or '').split('_')[-1],
+                                    v.get('name'), v.get('score'),
+                                    v.get('ratio'), _cells_v)
             _bsm = {'%d,%d' % k: list(v.get('marks') or []) for k, v in (mk or {}).items()
                     if v.get('marks')}
-            if _bs:
+            # ⛔⛔ 2026-10-19 **只按"格数够不够"判，不看图名**（两次真机事故的合并教训）
+            #   ---- 事故一（用户：「荒凉戈壁模板用错了吧，显示海边杂物？」）----
+            #     loop_log 里有多条 `board_snapshot` 只有 **2~5 格**，
+            #     地块名还是上一张图（夏日海滩）的残留 ⇒ GUI 画出"假棋盘" ✗
+            #   ---- 事故二（用户：「刚刚实时棋盘的都不是正在执行的那张图」）----
+            #     我第一版修法写成 `bool(mapname) and len(_bs) >= _SNAP_MIN`，
+            #     结果真机日志是 `{'snap_skip': 1, 'have': 28, 'mapname': ''}`
+            #     ⇒ **28 格完整棋盘只因图名没读到就被拦了** ✗✗
+            #     ⇒ 图内零整盘数据 ⇒ GUI 只能显示 `round` 的稀疏板（10 格）
+            #       或**上一张图遗留的 board** ⇒ 用户看到"不是正在跑的那张图" ✗
+            #   ---- 为什么图名不该当前提 ----
+            #     · 棋盘准确性只依赖**分类器**（`_disambiguate_map` 已用真帧挑对地图 ✓）
+            #     · 图名只影响 `bot_gui._new_map` 的换图判据（已有三重兜底 ✓）
+            #     · 进图首帧读到图名的概率**不高** ⇒ 拿它当前提 = 经常不写 ✓
+            #   ⇒ **只判格数**：`len(_bs) >= _SNAP_MIN`（正常盘 21~29，2~5 显然不可信）
+            _snap_ok = (len(_bs) >= _SNAP_MIN)
+            if not _snap_ok and rnd <= 2:
+                st['_snap_skip'] = st.get('_snap_skip', 0) + 1
+                if log is not None:
+                    log.append({'snap_skip': st['_snap_skip'],
+                                'have': len(_bs), 'need': _SNAP_MIN,
+                                'mapname': st.get('mapname') or ''})
+            if _snap_ok:
+                st['_snap_done'] = True
                 _bs_rec = {'board_snapshot': True, 'snap_round': rnd,
                            'mapname': st.get('mapname') or '', 'board': _bs}
                 if _bsm:
@@ -10510,7 +10595,19 @@ def one_round(b, log, rnd, prefix, st):
             #        也可能命中 ⇒ 假命中来源之一 ✓
             #   ⇒ ② 命中时**落盘取证**（连位置一起 ✓）⇒ 下次复现就有铁证 ✓
             #        （不猜根因 ✗ 先拿证据 ✓ —— 本项目一贯做法 ✓）
-            _SLOT_BOX = (110, 585, 380, 670)      # ← 只在这个框里找「已完成」✓
+            # ⛔⛔ 2026-10-19 **框扩到全部 4 个槽**（真机事故）
+            #   用户报：「进图不领已完成探索」
+            #   ---- 两层根因（都实测过）----
+            #     ① **模板尺寸错**：旧 `slot_done.png` 是 **76×24**，而真机
+            #        「已完成」实际只有 **约 51×17**（绿字，实测
+            #        x 212~263 / y 619~636）⇒ 旧模板全量 140 帧最高只 **0.8169**
+            #        （门槛 0.9）⇒ **永远不命中** ⇒ 领取代码一次都没跑过 ✗✗
+            #        （已重裁 55×21，实测分离度 1.0000 vs 0.2631 ✓）
+            #     ② **框太窄**：旧框 `x1=380` 只覆盖槽2/槽3，
+            #        槽4 的「已完成」在 **x≈456~570** ⇒ 完全在框外 ✗
+            #   ⇒ 新框 x 40~600 / y 600~660（覆盖全部 4 槽，上下各留余量）
+            #   ⚠ `fixed.find` 只返回第一个命中 ⇒ 每图仍只领 1 个（既有行为 ✓）
+            _SLOT_BOX = (40, 600, 600, 660)      # ← 覆盖全部 4 个槽 ✓
             #   ⚠ API 口径：`fx_at(b, name, band=键)` 的 `band` 是 **`fixed.BANDS` 的键**
             #     （不是坐标 ✗）；想按坐标框找 ⇒ 直接用 `fixed.find(img, name, box=…)` ✓
             _sd = None
@@ -12806,6 +12903,17 @@ def run_maps(a):
             import shutil as _sh
             _prev = os.path.join(os.path.dirname(LOG_PATH), 'loop_log_prev.json')
             _sh.copyfile(LOG_PATH, _prev)
+            # ⛔⛔ 2026-10-19 **备份完必须清空主文件**（真机事故见文件头）
+            #   用户报：「而且棋盘也没更新」「棋盘错了，计划也是错的」
+            #   病：只备份不清空 ⇒ GUI 继续读上一轮的 loop_log ⇒ 画出旧地图的棋盘
+            #       ⇒ 计划也按旧棋盘算 ⇒ 点序完全不对 ✗✗
+            #   ⇒ 写个空数组 ⇒ GUI 读不到旧 board ⇒ 老老实实等新数据 ✓
+            try:
+                import json as _js
+                with open(LOG_PATH, 'w', encoding='utf-8') as _f:
+                    _js.dump([], _f)
+            except Exception:               # noqa: BLE001
+                pass
     except Exception as _e_lp:              # noqa: BLE001
         say('   ⚠ loop_log 留档失败（不影响跑图）：%r' % (_e_lp,))
     if INSTANCE_TAG:                      # 多开：日志/统计也各自独立
@@ -12818,8 +12926,24 @@ def run_maps(a):
                 import shutil as _sh2
                 _sh2.copyfile(LOG_PATH,
                               os.path.join(WIN, 'loop_log_prev.json'))
+                # ⛔ 同上：备份完清空（多开每窗口独立，各自清空 ✓）
+                try:
+                    import json as _js2
+                    with open(LOG_PATH, 'w', encoding='utf-8') as _f2:
+                        _js2.dump([], _f2)
+                except Exception:           # noqa: BLE001
+                    pass
         except Exception:                   # noqa: BLE001
             pass
+    # ⭐ 兜底：文件还不存在（首次跑）也写个空数组 ⇒ GUI 早有文件可读，不报错 ✓
+    try:
+        if not os.path.exists(LOG_PATH) or os.path.getsize(LOG_PATH) < 3:
+            os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+            import json as _js3
+            with open(LOG_PATH, 'w', encoding='utf-8') as _f3:
+                _js3.dump([], _f3)
+    except Exception:                       # noqa: BLE001
+        pass
     say('实例：%s  设备：%s  目录：%s' % (INSTANCE_TAG or '（单开）', INSTANCE_DEV, b.runs))
     log = []
     t_all = time.time()

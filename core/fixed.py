@@ -51,6 +51,10 @@ K = PC_W / float(REF_W)          # 0.6667（720p 是 1080p 的纯等比缩放）
 
 # 匹配阈值：模板都是固定 UI，同分辨率下分数很高；0.62 留足余量
 MATCH_MIN = 0.62
+
+#: **掩膜匹配**（模板带 alpha）的独立门槛 —— 分数语义与 TM_CCOEFF 不同
+#:  实测：「已完成」命中 1.0000 ／ 未命中 ≤0.8476 ⇒ 0.92 留足余量 ✓
+MASK_MATCH_MIN = 0.92
 # 未命中时返回 None（调用方决定要不要回退 OCR）
 _cache: dict = {}
 
@@ -201,12 +205,36 @@ def find(img, name, box=None, min_conf=MATCH_MIN):
                 % (name, tw, th, box, sub.shape[1] if sub is not None else 0,
                    sub.shape[0] if sub is not None else 0))
         return None
-    if t.ndim == 3 and t.shape[2] == 4:          # 带 alpha 的模板：只比 RGB
+    # ⭐⭐⭐ 2026-10-19 **带 alpha 的模板走"掩膜匹配"**（用户口径：
+    #   「模板只框住文字，不要框到背景，因为不同图的背景不一样」）
+    #   ---- 为什么必须这样 ----
+    #     `slot_done`（「已完成」）下面贴的就是**该图的地图缩略图**
+    #     ⇒ 幽暗密林(深蓝)/荒凉戈壁(土黄)/遗忘之海(青蓝) 背景全不同
+    #     ⇒ 旧做法把背景一起比 ⇒ 换地图就掉分 ✗
+    #     ⇒ RGBA 模板的 **alpha = 文字掩膜**（背景 0）⇒ 背景权重为 0 ✓
+    #   ---- 算法 ----
+    #     `TM_CCOEFF_NORMED` **不支持 mask**（OpenCV 会抛错）
+    #     ⇒ 有掩膜时用 **`TM_CCORR_NORMED` + mask**
+    #     ⚠ 分数语义与 CCOEFF 不同（不是"1=相同"），实测：
+    #       命中 1.0000 ／ 未命中 ≤0.8476 ⇒ 掩膜模式用独立门槛 `MASK_MATCH_MIN` ✓
+    _mask = None
+    if t.ndim == 3 and t.shape[2] == 4:
+        _a = t[:, :, 3]
+        # alpha 全 255 ⇒ 等价于无掩膜（老模板），走原路径以保持分数语义不变 ✓
+        if int(_a.min()) < 255:
+            _mask = _a
         t = t[:, :, :3]
-    r = cv2.matchTemplate(sub.astype(np.float32),
-                          t.astype(np.float32), cv2.TM_CCOEFF_NORMED)
+    if _mask is not None:
+        r = cv2.matchTemplate(sub.astype(np.float32),
+                              t.astype(np.float32),
+                              cv2.TM_CCORR_NORMED, mask=_mask)
+        _thr = MASK_MATCH_MIN if min_conf is None or min_conf >= MATCH_MIN else min_conf
+    else:
+        r = cv2.matchTemplate(sub.astype(np.float32),
+                              t.astype(np.float32), cv2.TM_CCOEFF_NORMED)
+        _thr = min_conf
     _mn, mx, _ml, loc = cv2.minMaxLoc(r)
-    if mx < min_conf:
+    if mx < _thr:
         return None
     return (int(loc[0] + tw / 2 + ox), int(loc[1] + th / 2 + oy), round(float(mx), 3))
 

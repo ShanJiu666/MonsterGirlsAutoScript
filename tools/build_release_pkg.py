@@ -28,6 +28,7 @@
 """
 import argparse
 import io
+import glob
 import os
 import re
 import shutil
@@ -86,6 +87,50 @@ REPO_DROP_DIRS = ('.git', 'runs', 'hot', 'logs', 'dist', '__pycache__',
 REPO_DROP_FILES = ('/_ocr_tmp.png',   # 只排除仓根那份（运行期临时文件）
                    '/friend_mode.flag',  # 仓根那份是开发机状态，包里另放空文件
                    '/MGAS_dbg.exe')
+
+# ⭐⭐⭐⭐ 2026-10-19 真机帧的**安全存放处**（仓外，永不被打包清掉）
+#   用户口径：「我刚刚跑了几种图，都清了？」⇒ 打包 `rmtree(pkg)` 把
+#   `dist/.../runs/r_*.png` 全删了，而那些图是选优选帧的**唯一样本** ✗
+#   ⇒ 删包前先把它们抢救到这里 ✓
+FRAME_SAFE = r'D:\MGAS\_frame_samples'
+
+
+def _salvage_frames(pkg):
+    """把旧包里的真机帧拷到 `FRAME_SAFE`（返回抢救张数）
+
+    抢什么：
+      · `runs/r_*.png`        —— 每图首帧（选优选帧的样本）
+      · `runs/cap_close/*.png` —— 关面板前的截图（排查用，可选）
+    ⚠ 同名不覆盖（用 `_1`/`_2` 后缀）—— 不同批次的图可能同名（时间戳撞）
+    """
+    src_runs = os.path.join(pkg, 'runs')
+    if not os.path.isdir(src_runs):
+        return 0
+    try:
+        os.makedirs(FRAME_SAFE, exist_ok=True)
+    except Exception:               # noqa: BLE001
+        return 0
+    n = 0
+    pats = [os.path.join(src_runs, 'r_*.png'),
+            os.path.join(src_runs, 'cap_close', '*.png')]
+    for pat in pats:
+        for f in glob.glob(pat):
+            base = os.path.basename(f)
+            dst = os.path.join(FRAME_SAFE, base)
+            k = 1
+            while os.path.exists(dst):
+                stem, ext = os.path.splitext(base)
+                dst = os.path.join(FRAME_SAFE, '%s_%d%s' % (stem, k, ext))
+                k += 1
+                if k > 50:
+                    break
+            try:
+                shutil.copy2(f, dst)
+                n += 1
+            except Exception:       # noqa: BLE001
+                pass
+    return n
+
 
 
 def size_mb(p):
@@ -283,6 +328,18 @@ def main():
     name = 'MGAS-v%s-portable' % ver
     pkg = os.path.join(a.out, name)
     if os.path.isdir(pkg):
+        # ⭐⭐⭐⭐ 2026-10-19 **删包前先救出用户跑出来的真机帧**（用户报过"都清了？"）
+        #   ---- 为什么 ----
+        #     下面 `rmtree(pkg)` 会把旧包整个删掉，而**真机帧存在包里**：
+        #       `dist/MGAS-v1.0-portable/runs/r_*.png`
+        #     ⇒ 用户辛苦跑的图（选优选帧的唯一样本）**每次打包都会丢** ✗✗
+        #   ---- 修法 ----
+        #     删之前把 `runs/r_*.png` + `runs/*/_frames.json` 拷到
+        #       `D:\MGAS\_frame_samples\`（**仓外，永不被打包影响**）
+        #     并在最后打印"救出了几张、从哪找"✓
+        _saved = _salvage_frames(pkg)
+        if _saved:
+            print('  ⭐ 已抢救 %d 张真机帧 → %s' % (_saved, FRAME_SAFE))
         print('清理旧包…')
         shutil.rmtree(pkg, ignore_errors=True)
     os.makedirs(pkg, exist_ok=True)
