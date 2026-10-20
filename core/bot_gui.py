@@ -3622,22 +3622,31 @@ class App:
             return None
 
     def _load_recruit_pref(self):
-        """读回「免费招募」勾选（**读不到 ⇒ 关** ✓ 它会消耗当天那次免费机会）"""
+        """读回「免费招募」勾选（⭐ 2026-10-20 用户口径：**读不到 ⇒ 开**）
+
+        ⚠ 原来是"读不到 ⇒ 关"⇒ 新模拟器首次是关的 ✗
+          （用户报：「公会日常和免费招募默认勾选啊，为啥不勾？」）
+        ⚠ 它只花**免费机会**（不花宝石），用掉就自动跳过 ⇒ 默认开无副作用 ✓
+        """
         try:
-            v = self.prefs.load_recruit(False)
+            v = self.prefs.load_recruit(True)
         except Exception:       # noqa: BLE001
-            v = False
+            v = True
         self.recruit_var.set(bool(v))
         self._sync_recruit_btn()
         if v:
             self.log('（已记住：免费招募 开 —— 「立即招募」可点 ✓）')
 
     def _load_tasks_pref(self):
-        """读回「派遣任务」勾选（**读不到 ⇒ 关** ✓ 别偷偷改游戏状态）"""
+        """读回「派遣任务」勾选（⭐ 2026-10-20 用户口径：**读不到 ⇒ 开**）
+
+        ⚠ 原来是"读不到 ⇒ 关"⇒ 新模拟器首次是关的 ✗（用户报：「默认勾选啊」）
+        ⚠ 内含炼金（会消耗 6 件 5★ 满星装备）—— **用户明确要的** ✓
+        """
         try:
-            v = self.prefs.load_guild_tasks(False)
+            v = self.prefs.load_guild_tasks(True)
         except Exception:       # noqa: BLE001
-            v = False
+            v = True
         self.tasks_var.set(bool(v))
         if v:
             self.log('（已记住：公会日常 开 —— 派遣+炼金都做；'

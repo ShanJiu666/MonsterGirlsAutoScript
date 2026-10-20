@@ -532,8 +532,14 @@ class Prefs:
         """`<runs>/dev_<port>/.guild_tasks` ✓"""
         return self._path('.guild_tasks')
 
-    def load_guild_tasks(self, default=False):
-        """读不到 ⇒ **关**（与 `.auto_supply` 同口径：别偷偷改游戏状态 ✗）"""
+    def load_guild_tasks(self, default=True):
+        """读不到 ⇒ **开**（⭐ 2026-10-20 用户口径：「公会日常和免费招募**默认勾选**」）
+
+        ⚠ 改之前是 `default=False`（"别偷偷改游戏状态"）⇒ **新建模拟器/首次运行时是关的** ✗
+          （用户报：「公会日常和免费招募默认勾选啊，为啥不勾？」）
+        ⚠ 这颗勾选**内含炼金**（用户口径「派遣和炼金合成一个选项」）
+          ⇒ 默认开 = 默认会消耗 6 件 5★ 满星装备 ⇒ **这是用户明确要的** ✓
+        """
         return self._read_flag('.guild_tasks', default)
 
     def save_guild_tasks(self, v):
@@ -557,8 +563,12 @@ class Prefs:
         """`<runs>/dev_<port>/.recruit` ✓"""
         return self._path('.recruit')
 
-    def load_recruit(self, default=False):
-        """读不到 ⇒ **关**（与 `.auto_supply` 同口径 ✓）"""
+    def load_recruit(self, default=True):
+        """读不到 ⇒ **开**（⭐ 2026-10-20 用户口径：「…免费招募**默认勾选**」）
+
+        ⚠ 改之前 `default=False` ⇒ 新模拟器上首次是关的 ✗（用户报过）
+        ⚠ 它是**免费机会**（不花宝石），用掉就跳过 ⇒ 默认开无副作用 ✓
+        """
         return self._read_flag('.recruit', default)
 
     def save_recruit(self, v):
