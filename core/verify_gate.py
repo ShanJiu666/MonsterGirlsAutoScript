@@ -2136,6 +2136,31 @@ def main():
         check('㉚ ⚠ 反向：预言石碑仍**领掉**（没被带坏 ✓）',
               '预言石碑那支**仍在**' in out)
 
+    # ── AU：4 楼被误判成"椅子层" ⇒ 炼金整段放弃（2026-10-23 用户报）──────
+    #   用户原话：「**综合模拟器的自动炼金失败了**」
+    #   根因：`count_bubbles` 只判「面积≥400 + 纯白比≥0.02」，而 4 楼同一条 y 带里
+    #     有金柱高光窄条（12px 宽）+ 机巧秘宝 NPC 小气泡（42px 宽）⇒ 凑够 ≥2 个 ⇒
+    #     `chair_row_hint` 判"还在 2 楼" ⇒ `scroll_to_top` 返回 False ⇒ 放弃炼金 ✗
+    #   修法：加 `BUBBLE_MIN_W = 60`（2 楼真气泡 84~114px / 4 楼假块 12、42px）
+    #   ⚠ 本组**纯离线**（只读 `_verify/` 的 6 张真机帧，不碰设备、不写共享临时文件）
+    print()
+    print('【AU】4 楼被误判成「椅子层」⇒ 炼金放弃（2026-10-23 用户报）')
+    vfb = os.path.join(_subdir_of('verify_floor_bubbles.py'), 'verify_floor_bubbles.py')
+    if not os.path.exists(vfb):
+        skip('verify_floor_bubbles.py', '文件不存在')
+    else:
+        rc, out = run(['verify_floor_bubbles.py'], timeout=300)
+        check('楼层气泡回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛘 ⭐⭐ 4 楼 4 帧：`count_bubbles` 必须 **0**（不再误判成椅子层 ✓）',
+              '期望 0' in out)
+        check('㛙 ⚠⚠ **对照项**：关掉宽度过滤 ⇒ 4 楼回到 2 块（复现原 bug ⇒ 不是恒绿 ✓）',
+              '复现' in out)
+        check('㛚 ⭐⭐ **零损失**：2 楼真椅子层仍是 4 个（没把真气泡判掉 ✓）',
+              '期望 4' in out)
+        check('㛛 ⭐ `scroll_to_top` 判到椅子层**返回 False**；`alchemy.run` 收到就放弃 ✓',
+              '放弃链路完整' in out)
+
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
