@@ -2161,6 +2161,33 @@ def main():
         check('㛛 ⭐ `scroll_to_top` 判到椅子层**返回 False**；`alchemy.run` 收到就放弃 ✓',
               '放弃链路完整' in out)
 
+    # ── AV：商人明明买完还要再点一下（2026-10-24 用户报）──────────────────
+    #   用户原话：「**为什么第三张图和第四张图的两个商人，明明买完了，还要去点一下？**」
+    #   两个叠加的 bug：
+    #     ① 「强匹配商人」**写了两套判据**：
+    #        cells_of 用 score>=0.85 **or** _buy_top_self；
+    #        vault_px_now **只认** score>=0.85（真商人 0.695）⇒ 买完记忆被删 ⇒ 反复点
+    #     ② `merchant_done` 是**只写不读的死集合** ⇒ 对行为零影响
+    #   修：抽 `_cell_is_strong_buy()` 两处同源 + 在 buy 汇聚点按 merchant_done 过滤
+    #   ⚠ 本组**纯离线**（只用固定夹具复算，不碰设备）⇒ 可并发 ✓
+    print()
+    print('【AV】商人明明买完还要再点（2026-10-24 用户报）')
+    vmb = os.path.join(_subdir_of('verify_merchant_bought.py'), 'verify_merchant_bought.py')
+    if not os.path.exists(vmb):
+        skip('verify_merchant_bought.py', '文件不存在')
+    else:
+        rc, out = run(['verify_merchant_bought.py'], timeout=300)
+        check('商人买完回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛜 ⭐⭐ 真机 0.695 / 0.669 的商人 ⇒ strong=True（不再被判"不在了"✓）',
+              'strong=True' in out and '0.695' in out)
+        check('㛝 ⚠⚠ **对照项**：低分 + gap 0.05 的误报 ⇒ strong=False（不是恒真 ✓）',
+              'strong=False' in out)
+        check('㛞 ⛔ `merchant_done` **既有写也有读**（不再是死集合 ✓）',
+              'n=1' in out)
+        check('㛟 ⛔ 撤回守门：`vault_px_now` 里没有裸的 score 门槛 ✓',
+              '预期 0 项' not in out and rc == 0)
+
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)

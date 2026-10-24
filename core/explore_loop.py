@@ -3677,7 +3677,11 @@ def cells_of(img, mapname=None, code=None):
         #       实测 793 个格的 `k` **全是 3** —— 因为每类有好几个动画帧、
         #       同一 sid 自然占满 `top` 前几名 ⇒ `k` **完全没有区分度** ✗
         #       （真正有区分度的是 **gap** ✓）—— 这正是"夹具/判据要拿真数据标定"那条教训 ✓
-        strong = (v['score'] >= BUY_SCORE_MIN) or _buy_top_self(v)
+        # ⭐ 2026-10-24 抽成共用语词 `_cell_is_strong_buy()` —— **与 `vault_px_now` 调同一个函数**
+        #   原来这里是**内联表达式**、`vault_px_now` 另有**一套只认 score 的** ⇒ 两处漂移
+        #   ⇒ 真机 0.695 的商人「进 buy 时算商人、判记忆时不算」⇒ 买完反复点开 ✗
+        #   详见 `_cell_is_strong_buy()` 的 docstring（含真机 loop_log 铁证）✓
+        strong = _cell_is_strong_buy(v)
         if not v['revealed']:
             out['gray'].append(p)
             # ⭐ 未揭示的商人/宝库**仍然是目标**（用户 2026-09-25：「有黄金宝库你没点就要退」）：
@@ -3758,6 +3762,37 @@ def _buy_top_self(v):
         return False
     except Exception:       # noqa: BLE001
         return False
+def _cell_is_strong_buy(v):
+    """这格算不算**强匹配的商人/宝库**（= 该被当目标、也 = 买完记忆该保住）
+
+    ⛔⛔⛔ 2026-10-24 **这是唯一一份判据**（治「商人买完了还要再点一下」）
+      ---- 为什么要抽成函数 ----
+        原来**两个地方各写了一套**：
+          · `cells_of()`（收 buy 列表）用
+              strong = score >= BUY_SCORE_MIN **or** _buy_top_self(v)
+          · `vault_px_now()`（`_prune_bought_done` 靠它判"那格还是不是商人"）
+            只认 score >= BUY_SCORE_MIN
+        ⇒ 真商人分数天生低（实测 **0.689~0.847**，2026-10-16 标定），
+          **同一格**会出现「进 buy 列表时算商人、判记忆时不算商人」✗
+      ---- 真机后果（`runs/acc2/loop/loop_log.json`，10-24 22:50，设备 20000）----
+        #104 board `3,2` = `008 旅行商人` **0.695**
+        #128 {"bought_rec":[168,908],"cell":"3,2"}   ← 买完 4 档，记住
+        #131 {"bought_done_pruned":1,"kept":[]}       ← ★ 下一轮记忆被删
+        ⇒ 又进目标 ⇒ 又点开（用户：「**明明买完了，还要去点一下**」）
+        （map 3 的 `5,7` 0.669 同样复发 ✓）
+
+    ⚠ 两个分支的口径**都保留**（不是新发明）：
+        · `score >= BUY_SCORE_MIN` —— 宝库/高分商人走这条（实测宝库 0.999）
+        · `_buy_top_self(v)` —— 顶部自洽放宽（2026-10-16 的标定：
+          真目标 gap 0.343~0.656 / 误报 0.054~0.255 ⇒ 门槛 0.30）
+    ⚠ 拿不到 `top` ⇒ `_buy_top_self` 返回 False ⇒ 退回老判据（保守 ✓）
+    """
+    try:
+        return (float(v.get('score') or 0) >= BUY_SCORE_MIN) or _buy_top_self(v)
+    except Exception:       # noqa: BLE001
+        return False                 # 判不了 ⇒ 不算强匹配（与老行为一致 ✓）
+
+
 BUY_PROBE_MAX = 3           # 「强匹配但被判未揭示」的宝库/商人：每格每图最多验证式点几下（见下）
 # ⭐ 2026-10-02：`find_camp_cell()` 兜底用 —— 单格候选里「营地(000)」的**最低分**。
 #   标定依据（离线真机帧，零体力）：
@@ -3833,11 +3868,39 @@ def _is_purple_cell(tapped_sid, ev_tiles=None, tapped=None):
 
 
 def vault_px_now(c, revealed_only=True, strong_only=True, any_color=False):
-    """当前帧分类结果里的商人/宝库格（像素）—— `any_color=True` 时连"点开详情才认出的"也算
+    """当前帧分类结果里的**商人/宝库格**（像素）—— `any_color=True` 时连"点开详情才认出的"也算
 
     ⭐ 2026-10-01 v0.96 新增（用户真机报「**黄金宝库明明都揭示了能直接点，他又去打了两个
     战斗地块**」）：这是**唯一**的「宝库像素来源」，供三处共用（防钉死 / 免拉黑 / 点序置顶），
     免得三份判据各写一遍又漂移 ✗
+
+    ⛔⛔⛔ 2026-10-24 **强匹配判据必须与 `cells_of` 同一套**
+      ---- 用户报告（原话）----
+        「**为什么第三张图和第四张图的两个商人，明明买完了，还要去点一下？**」
+      ---- 真机铁证（`runs/acc2/loop/loop_log.json`，设备 20000，10-24 22:50）----
+        #104 board `3,2` = `008 旅行商人` **score=0.695** ratio=0.66
+        #128 {"bought_rec":[168,908],"cell":"3,2"}      ← 买完 4 档，记住了
+        #131 {"bought_done_pruned":1,"kept":[]}          ← ★ 下一轮**把记忆删了**
+        ⇒ 记忆没了 ⇒ 不再受"买完不放回"保护 ⇒ 又进目标 ⇒ 又点开 ✗
+        （map 3 的 `5,7` score=0.669 一模一样，两图各复发一次 ✓）
+      ---- 根因：**同一个概念写了两套判据** ----
+        · `cells_of()` 收 buy 用
+            strong = score >= BUY_SCORE_MIN **or** _buy_top_self(v)
+          （2026-10-16 为治「旅行商人认不到」加的**顶部自洽**放宽：真商人天生 NCC 低，
+            实测 0.689~0.847 ⇒ 单靠 0.85 连**已揭示**的商人都挡 ✗）
+        · 而**本函数**（`_prune_bought_done` 靠它判"那格还是不是商人"）**只认 score**
+          ⇒ 0.695 < 0.85 ⇒ 判"它不在了" ⇒ 清记忆 ⇒ 反复点 ✗✗
+        ⇒ 与 `alchemy.py:340` 那条「找到时认它、后续判断却不认」**完全同一个形状**
+          —— 本项目第 N 次"判据写在两处、迟早漂移" ✓
+      ---- 修法 ----
+        `strong_only` 分支改成**与 `cells_of` 逐字同口径**：
+            strong = (score >= BUY_SCORE_MIN) or _buy_top_self(v)
+        ⇒ 商人 0.695 但 top-gap 够 ⇒ **继续算"还在"** ⇒ 记忆不被删 ✓
+      ⚠ 方向安全：把"还在"判多了 ⇒ 最多多花一次"开面板看一眼"；
+        判少了（现状）⇒ 反复点、反复开面板（用户看到的正是这个 ✗）
+      ⚠ `strong_only=False` 的调用方（`_blocked_px` 等）行为**不变** ✓
+      ⚠ 真商人面板里**本来就有 4 档**（买完面板仍在）⇒ 这也是"反复点"会看到的路由；
+        修好后第一轮就记住，不会再开第二次 ✓
     """
     out = []
     for (r, cc), v in sorted(((c or {}).get('st') or {}).items()):
@@ -3847,7 +3910,15 @@ def vault_px_now(c, revealed_only=True, strong_only=True, any_color=False):
         nm = str(v.get('name') or '')
         if not any(k in nm for k in _COLOR_TILES):
             continue
-        if strong_only and float(v.get('score') or 0) < BUY_SCORE_MIN:
+        # ⛔⛔⛔ 2026-10-24 **判据与 `cells_of` 逐字同口径**（见 docstring 的铁证）
+        #   ---- 病 ----
+        #     原来只认 `score >= 0.85`；而 `cells_of` 早就放宽成
+        #     `score >= 0.85 **or** _buy_top_self(v)`（真商人 NCC 天生低，实测 0.689~0.847）
+        #     ⇒ **同一格**：进 buy 列表时算商人、判 pruned 时不算商人 ✗
+        #     ⇒ 真机 0.695 的商人买完 → 下一轮记忆被删 → 反复点开（用户报的就是这个）
+        #   ---- 修 ----
+        #     两处**用同一个表达式**。别再各写一份（本项目已有太多次同族教训 ✓）
+        if strong_only and not _cell_is_strong_buy(v):
             continue
         if revealed_only and not bool(v.get('revealed')):
             continue
@@ -10495,6 +10566,30 @@ def one_round(b, log, rnd, prefix, st):
             % (st.get('gold_locked'), GOLD_MIN_BUY, '、'.join(_gold_cells)))
         buy = []
         buy_hidden = []
+    # ⛔⛔⛔ 2026-10-24 **商人格买完就不该再进目标**（治「明明买完了还要去点一下」）
+    #   ---- 病 ----
+    #     `merchant_done` 这个集合**只写不读**：
+    #       · 写：上面那段「商人格买完不消失 ⇒ 不放回」里 setdefault(...).add(...)
+    #       · 读：**全仓零处**（grep 只有那一条写入 + 一条注释）
+    #     ⇒ 写进去了，但**没有任何判据用它** ⇒ 对行为零影响（死集合）✗
+    #   ---- 真机证据（`runs/acc2/loop/loop_log.json`，10-24 22:50）----
+    #     #128 {"bought_rec":[168,908],"cell":"3,2"}   ← 买完记住
+    #     #131 {"bought_done_pruned":1,"kept":[]}       ← 记忆被删（判据不同源，另一条 bug）
+    #     ⇒ 两条路都让"买完"这件事失传 ⇒ 下一轮又把它当目标 ✗
+    #   ---- 修 ----
+    #     在 **buy 列表的汇聚点**按 `merchant_done` 过滤一次（与金币闸门同位置）
+    #     ⚠ 只滤**商人**，不滤宝库：宝库有多轮奖励（放回是对的 ✓，用户口径）
+    #     ⚠ merchant_done 存的是 **(row,col) 元组**，而 buy 是**像素** ⇒ 用 cell_of() 换算 ✓
+    _mdone = st.get('merchant_done') or set()
+    if _mdone and buy:
+        _kept_buy = [p for p in buy if cell_of(*p) not in _mdone]
+        _cut = len(buy) - len(_kept_buy)
+        if _cut:
+            log.append({'merchant': 'skip_bought', 'cut': _cut,
+                        'cells': sorted('%d,%d' % rc for rc in _mdone),
+                        'note': '商人**买完不消失** ⇒ 已买过的格不再进目标（别再点 ✗）'})
+            say('       · 商人已买过 %d 格 ⇒ 不再排进目标（买完格子不消失，不重复点 ✓）' % _cut)
+            buy = _kept_buy
     # ⚠ 2026-09-25 修（用户报「实例B第一张图明明还有一个未揭示的商人就退了」）：
     #   未揭示的商人/宝库**点不动**，绝对不能排进点击序列 —— 旧版把它当普通目标去点，
     #   点一次没反应就 cold+1，4 轮后被「放弃」规则踢掉 → 判成目标清完 → 退图漏掉它。
