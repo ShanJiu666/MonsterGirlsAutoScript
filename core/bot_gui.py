@@ -2848,6 +2848,44 @@ class App:
                     continue
         except Exception:       # noqa: BLE001
             tgt = set()
+        # ⛔⛔⛔ 2026-10-24 **绘制指纹：数据没变就**一次都不重画（治"步数图标一直闪"）
+        #   ---- 用户报告（原话）----
+        #     「当前状态里的进度，就是规划的那几个步数图标，为什么一直闪烁，
+        #       修一下，**每图换一次就行了**」
+        #   ---- 根因（读代码即可证）----
+        #     `tick_data()` **每 2 秒**无条件调本函数（`bot_gui.py:2391`），
+        #     而本函数末尾**无条件**调 `board.update_board(...)`，
+        #     它开头就是 `delete(all)` + **整盘重画**（`widgets.py:848`）
+        #     ⇒ 就算**一个字节都没变**，也每 2 秒把序号圆抹掉再画一遍 ⇒ **一直闪** ✗✗
+        #   ---- 为什么 2026-10-19 的 `paint_order()` 没治好 ----
+        #     它只修了 **stdout 计划行**那条路（`_paint_plan`）✓
+        #     而**每 2 秒那条**走的是本函数 ⇒ 仍然全量重画 ⇒ 闪烁照旧 ✗
+        #     （典型"修了一半"：一条路径治了、另一条没治）
+        #   ---- 修法（口径 = 用户原话"**每图换一次就行了**"）----
+        #     把"要画的东西"压成一个**指纹**，与上次相同 ⇒ **直接 return，不碰画布** ✓
+        #     指纹只取**真正影响画面**的东西：board / marks / order / cost /
+        #     target_cells / hud / spans —— 任一变化就重画（换图、揭示新格、
+        #     计划换、HUD 读数变 ✓）
+        #   ⚠ 指纹必须**稳定**（同样数据 ⇒ 同样字符串）：全部走 `sorted()`，
+        #     绝不用 `set` 的迭代序 / `id()` ✓
+        #   ⚠ 例外：**算不出指纹**（畸形数据）⇒ 不落盘 ⇒ 下次照旧重画（宁闪不空白 ✓）
+        _sig_now = None
+        try:
+            _sig_now = repr((
+                sorted((board or {}).items()),
+                sorted((marks or {}).items()) if isinstance(marks, dict) else repr(marks),
+                list(order or []),
+                (plan or {}).get('cost'),
+                sorted(tgt),
+                sorted((hud or {}).items()) if isinstance(hud, dict) else repr(hud),
+                self._spans_of(board),
+            ))
+        except Exception:           # noqa: BLE001
+            _sig_now = None                 # 算不出 ⇒ 照旧重画（宁闪不空白 ✓）
+        if _sig_now is not None and _sig_now == getattr(self, '_board_paint_sig', None):
+            # ⭐ 数据没变 ⇒ **一次都不碰画布** ⇒ 序号圆不再被抹掉重画 ✓
+            #   但下面那两行文字仍是"每拍刷新也零代价"的 —— 一并跳过更省 ✓
+            return
         # ⚠ 兼容旧版 `widgets`（没有 `spans` 参数）：给热更留一条退路 ——
         #   万一画布那侧还是老签名，棋盘要**退回"只画锚点格"**，而不是整盘画不出来 ✗
         try:
@@ -2858,6 +2896,9 @@ class App:
             self.board.update_board(board=board, marks=marks, order=order,
                                     cost=(plan or {}).get('cost'), target_cells=tgt,
                                     hud=hud)
+        # ⭐ 画成功了才记指纹（**失败不记** ⇒ 下一拍会重试，不会永久空白 ✓）
+        if _sig_now is not None:
+            self._board_paint_sig = _sig_now
         if not board and not order:
             self.plan_var.set('计划：—（等进图；格名进图 ~1s 出快照）')
         else:

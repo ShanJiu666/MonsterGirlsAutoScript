@@ -2188,6 +2188,33 @@ def main():
         check('㛟 ⛔ 撤回守门：`vault_px_now` 里没有裸的 score 门槛 ✓',
               '预期 0 项' not in out and rc == 0)
 
+    # ── AW：规划步数图标一直闪烁（2026-10-24 用户报）────────────────────
+    #   用户原话：「当前状态里的进度，就是规划的那几个步数图标，为什么一直闪烁，
+    #              修一下，**每图换一次就行了**」
+    #   根因：`tick_data()` 每 2 秒无条件调 `_update_board()`，而它末尾无条件调
+    #     `board.update_board()` ⇒ 内部 `delete(all)` + 整盘重画 ⇒ **数据没变也重画** ✗
+    #   为什么 2026-10-19 的 `paint_order()` 没治好：它只修了 **stdout 计划行**那条路
+    #     （`_paint_plan`），而**每 2 秒那条**走的是 `_update_board` ✗（修了一半）
+    #   修：加**绘制指纹**，7 个影响画面的输入全同 ⇒ 直接 return，不碰画布 ✓
+    #   ⚠ 本组**纯离线**（只读源码 + 复算指纹，不碰设备）⇒ 可并发 ✓
+    print()
+    print('【AW】规划步数图标一直闪烁（2026-10-24 用户报）')
+    vnf = os.path.join(_subdir_of('verify_board_no_flicker.py'), 'verify_board_no_flicker.py')
+    if not os.path.exists(vnf):
+        skip('verify_board_no_flicker.py', '文件不存在')
+    else:
+        rc, out = run(['verify_board_no_flicker.py'], timeout=300)
+        check('棋盘防闪烁回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛠 ⭐⭐ 数据没变 ⇒ **一次都不重画**（序号圆不再被抹 ✓）',
+              '一次都不重画' in out)
+        check('㛡 ⚠⚠ **对照项**：换图/揭示/计划/HUD 变了 ⇒ 指纹必变（会重画 ✓）',
+              '指纹变了' in out)
+        check('㛢 ⛔ 位置守门：指纹判断在 update_board **之前** ✓',
+              '顺序正确' in out)
+        check('㛣 ⛔ 指纹里不含时间戳/随机量（否则等于没修 ✓）',
+              '没有 time' in out or rc == 0)
+
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
