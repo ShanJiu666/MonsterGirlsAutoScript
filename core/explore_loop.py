@@ -7330,9 +7330,24 @@ def popups(b, items, log, ctx=None):
                         if tapped and _st is not None:
                             _bd = _st.setdefault('bought_done', set())
                             _bd.add((int(tapped[0]), int(tapped[1])))
+                            # ⭐⭐⭐ 2026-10-26 **买完这一刻就记 `merchant_done`**
+                            #   ---- 病 ----
+                            #     `merchant_done` 原来**只在**「摘除逻辑」那段写，
+                            #       而那段的条件是 `_p in done and _p not in _just_bought`
+                            #       ⇒ **买完那一轮 `_just_bought` 正好有它** ⇒ 永远写不进去 ✗
+                            #       ⇒ 那个集合是**只写不读的死集合**（本项目同族第 N 次 ✓）
+                            #       ⇒ 真机实测：`grep -c skip_bought` = **0**（一次都没触发）
+                            #       （真机 loop_log #39 = {"bought_rec":[264,1004],"cell":"4,3"}）
+                            #   ---- 修法 ----
+                            #     **在买完的现场就记**（这里 `tapped` 就是商人格坐标 ✓）
+                            #     ⇒ 下一轮 `buy` 列表的过滤立刻生效 ⇒ 不再重复点 ✓
+                            #   ⚠ 记的是 **(row,col) 格号**（与过滤那侧同量纲 ✓）
+                            _md = _st.setdefault('merchant_done', set())
+                            _md.add(tuple(cell_of(*tapped)))
                             log.append({'bought_rec': list(tapped),
                                         'cell': ('%d,%d' % cell_of(*tapped)),
-                                        'bd': sorted(_bd)})
+                                        'bd': sorted(_bd),
+                                        'merchant_done': len(_md)})
                         else:
                             log.append({'bought_rec_skip': list(tapped or ()),
                                         'why': ('no_tapped' if not tapped
@@ -9818,11 +9833,34 @@ def one_round(b, log, rnd, prefix, st):
     #   · 有面板 / 到刷新轮 / 还没读到图名 ⇒ 照旧真读一次（体力、槽位最多陈旧 1 轮）✓
     #   ⚠ 这与上面 2026-09-25 那次回退**不是同一件事**：那次是**窄带读字**判面板
     #     （残留面板漏看 ⇒ 对着面板乱点 ✗）；这次是**图像判棋盘有没有被挡**，方向正确 ✓
-    _c0 = _cells_cached(b, img, mapname=st.get('mapname') or '')
-    try:
-        _panel0 = bool(board_hidden(_c0))
-    except Exception:                       # noqa: BLE001
-        _panel0 = True                      # 判不出来 ⇒ 保守：照旧真读一次 ✓
+    # ⛔⛔⛔ 2026-10-26 **首轮不要用「空图名」做那次分类**（治「一直是图名未读到」）
+    #   ---- 病 ----
+    #     原来传 `st.get('mapname') or ''` ⇒ **首轮传的是 ''**（=「试过了仍空」）
+    #     ⇒ `board_state` 走「全部 code 当候选」⇒ **15 个 code 各建一次盘**
+    #       ⇒ 打出**误导**的「图名『（图名未读到）』有歧义 [15个]」
+    #       ⇒ 而**图名其实读到了**（真机 loop_log #7 = "夏日海滩" ✓）—— 只是这句在 OCR 之前打的 ✗
+    #   ---- 关键洞察：**首轮那次分类的结果只用来决定要不要 OCR** ----
+    #     `_need_ocr` 里已经有 `not st.get('mapname')` ⇒ **首轮必然 OCR** ✓
+    #     ⇒ 那次「空图名全量消歧」的结果**只喂给 `board_hidden()`**（判面板），
+    #       而它**不改变**「要不要 OCR」这个决定（首轮已经定了：要）⇒ **纯属白花** ✗
+    #   ---- 修法（**只改这一处调用点，不动 `board_state` 的语义**）----
+    #     首轮（还没图名）⇒ **跳过**那次分类，直接判「要 OCR」；
+    #     OCR 之后**用真图名**再分类一次（下面 `c = _cells_cached(...)` 那行已经在做 ✓）
+    #   ⚠ 为什么**不能**改 `board_state`（我第一版改错了，被门禁当场抓出 ✓）：
+    #     `in_map()`（:4255）也调 `cells_of(img, mapname=map_name(items))`，
+    #     那儿**空图名时也要分类结果**（靠「格子兜底」判在不在图里）⇒
+    #     一旦让空图名返回空 ⇒ `n=0 < 8` ⇒ 把「在图里」判成「不在图里」⇒ **回归** ✗✗
+    #   ⚠ 所以这里用「**跳过**」而不是「改语义」：只影响本函数首轮那一次 ✓
+    _mn_have = st.get('mapname')
+    if _mn_have:
+        _c0 = _cells_cached(b, img, mapname=_mn_have)
+        try:
+            _panel0 = bool(board_hidden(_c0))
+        except Exception:                   # noqa: BLE001
+            _panel0 = True                  # 判不出来 ⇒ 保守：照旧真读一次 ✓
+    else:
+        # ⭐ 首轮：还没图名 ⇒ **必定** OCR（见 `_need_ocr`）⇒ 不必先花 15 个 code 消歧 ✓
+        _panel0 = True
     _need_ocr = bool(_panel0 or not st.get('mapname')
                      or int(ROUND_OCR_EVERY) <= 1
                      or (rnd % max(1, int(ROUND_OCR_EVERY))) == 0)

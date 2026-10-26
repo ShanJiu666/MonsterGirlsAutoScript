@@ -2247,6 +2247,40 @@ def main():
         check('㛰 ⛔ 收工日常与自动重开**必须同一份判据**（不许各写一份 ✓）',
               rc == 0)
 
+    # ── AY：图名「一直是图名未读到」+ 商人买完还点（2026-10-26 用户报）────────
+    #   用户原话：「为什么**一直是图名未读到**？遇到很多次了。
+    #              而且这张图明明买完了旅行商人，还会再次点开」
+    #   ① 病：轮首用「空图名」做全量消歧（15 个 code ≈7.5 秒/图 + 误导日志）
+    #      真机：loop_log #7 = {"mapname":"夏日海滩"} ⇒ **图名其实读到了** ✓
+    #      ⇒ 那句「（图名未读到）」是「还没 OCR 就先试探」打出来的，不是 OCR 失败 ✗
+    #      修：**改调用点**（轮首跳过那次分类）⇒ **不动 `board_state` 语义** ✓
+    #      ⚠ 动 `board_state` 会让 `in_map()` 回归（它依赖空图名也能分类）⇒
+    #        被 verify_newequip / verify_collect_fast 当场抓出 ✓（本轮真踩）
+    #   ② 病：`merchant_done` 的写入条件恒不成立 ⇒ 只写不读（`skip_bought` 真机 0 次）
+    #      修：在**买完的现场**就写入 ✓
+    #   ⚠ 本组**纯离线**（只读源码 + 复算坐标，不碰设备）⇒ 可并发 ✓
+    print()
+    print('【AY】图名「一直是未读到」+ 商人买完还点（2026-10-26 用户报）')
+    vnm = os.path.join(_subdir_of('verify_mapname_and_merchant.py'), 'verify_mapname_and_merchant.py')
+    if not os.path.exists(vnm):
+        skip('verify_mapname_and_merchant.py', '文件不存在')
+    else:
+        rc, out = run(['verify_mapname_and_merchant.py'], timeout=300)
+        check('图名+商人回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐⭐ 轮首跳过那次分类 ⇒ **不做**全量消歧（省 ≈7.5s/图 ✓）',
+              '首轮跳过时不做 cells_cached' in out)
+        check('㛱b ⛔ `board_state` 语义**没被改**（`in_map` 依赖它 ⇒ 回归守卫 ✓）',
+              'board_state 的语义没被改' in out)
+        check('㛲 ⭐⭐ 买完现场就写 `merchant_done` ⇒ 不再进目标 ✓',
+              '买完现场有写入点' in out)
+        check('㛳 ⭐⭐ 执行级：真机 px[264,1004] 买完后被滤掉 ✓',
+              '商人格被滤掉' in out)
+        check('㛴 ⚠⚠ **对照项**：没买过的商人格必须保留（不是恒滤 ✓）',
+              '不是恒真' in out)
+        check('㛵 ⛔ AST 守门：旧写法（两段式 or 空串）已不存在 ✓',
+              rc == 0)
+
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
