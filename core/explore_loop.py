@@ -7838,9 +7838,31 @@ def _ocr_cached(b, tag, cache):
     return _it
 
 
-def finish_map(b, log, timeout=90):
+def finish_map(b, log, timeout=90, mapname=None):
     """结束冒险 → 回选图界面
 
+    ⭐⭐⭐ 2026-10-26 **加 `mapname` 参数**（治「结束了还要读图名字」）
+      ---- 用户报（原话）----
+        「为什么结束了还要读图名字？」
+      ---- 真机铁证（runs/gui_console_20261026.log，22:41 那把）----
+        22:41:47  本图结束：done（耗时 38 秒）
+        22:41:56  · 图名「（图名未读到）」有歧义 [15 个代码] ⇒ 实测选 S00003（高分格 21）✓
+        22:42:00  · 已回到选图界面（模板判据 7ms · 省掉一次 OCR ✓）
+        22:42:00  · 退图细账：图上 38.4s ｜ **退图 13.0s**
+      ---- 根因（读代码即可证）----
+        本函数里 `board_hidden(_cells_cached(b, b.img(), mapname=''))`（`:8016`）
+        传的是 **空串** ⇒ `board_state('')` ⇒ 「图名为空 ⇒ 全部 code 当候选」
+        ⇒ **15 个 code 各建一次盘**（≈4 秒）⇒ 打出那句「（图名未读到）」✗✗
+        ⇒ 而**退图时根本不需要知道地块名** —— `board_hidden` 只看
+          「有多少格被压暗」，但它的 `ratio` 分母 = **模板亮度** ⇒ 需要**正确的 code** ✓
+      ---- ⚠⚠ 这是我 10-26 那次修复的**副作用**（诚实记账）----
+        修复前：首轮那次全量消歧会**顺手填** `_CODE_DECIDED['']`
+        ⇒ 退图时 `mapname=''` 命中缓存 ⇒ 不再消歧 ⇒ **看不到那句**
+        修复后：首轮**跳过**了 ⇒ `_CODE_DECIDED['']` 一直是空
+        ⇒ 退图时**第一次**做全量消歧 ⇒ **那句冒出来了** + 多花 4 秒 ✗
+        ⇒ 修法：**把当前图的图名传进来**（`st['mapname']` 早就在手上 ✓）
+        ⇒ `_CODE_DECIDED[图名]` 早被图内分类填好 ⇒ **零消歧、零 OCR、零日志** ✓
+        ⇒ 额外好处：`board_hidden` 拿到**正确的 code** ⇒ ratio 算得准 ⇒ 判据更准 ✓
     ⚠ 2026-09-25：退图时**经常弹确认框**（「还有未拾取的战利品 / 是否结束冒险？」），
       按钮是 确定(774,1113) / 取消(305,1113) —— 只点靠右的那个，绝不点取消；
       另外还可能先弹结算面板（底部「关闭」）或奖励领取，都要先处理掉。
@@ -8013,7 +8035,11 @@ def finish_map(b, log, timeout=90):
             #     判"有框"或判不出来 ⇒ 照旧走原逻辑（保守，行为不变）✓
             _cc_need = True
             try:
-                _cc_need = bool(board_hidden(_cells_cached(b, b.img(), mapname='')))
+                # ⭐⭐⭐ 2026-10-26 **用当前图的图名**（不再用空串 ⇒ 不做全量消歧）
+                #   详见 `finish_map` 的 docstring 那段（真机 22:41 的日志铁证）
+                #   ⚠ 拿不到图名时仍传 '' ⇒ 退回到旧行为（全量消歧，兜底保留）✓
+                _cc_need = bool(board_hidden(
+                    _cells_cached(b, b.img(), mapname=(mapname or ''))))
             except Exception:                   # noqa: BLE001
                 _cc_need = True
             if not _cc_need:
@@ -13548,7 +13574,11 @@ def run_maps(a):
         #   ⇒ 先用计时把这一段拆开，别再猜（跑完看 `gui_*.log` 的 `退图细账` 一行 ✓）
         _t_fin0 = time.time()
         try:
-            ok = finish_map(b, log)
+            # ⭐ 2026-10-26 **把当前图的图名传进 `finish_map`**
+            #   ⇒ 退图时那次 `board_hidden` 分类**用真 code** ⇒
+            #     **不做「15 个 code 全量消歧」** ⇒ 不再打印「（图名未读到）」+ 省 ≈4 秒 ✓
+            #   （真机 22:41 那把的日志铁证，详见 `finish_map` docstring）
+            ok = finish_map(b, log, mapname=st.get('mapname'))
         except Exception as _e8:      # noqa: BLE001
             ok = False
             log.append({'map': mi, 'finish_raised': repr(_e8)[:200]})

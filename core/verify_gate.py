@@ -2315,6 +2315,32 @@ def main():
               '只置空 name' in out)
         check('㛶 ⛔ AST 守门：top1 仍是 lst[0]（不许「重新挑」） ✓',
               'top1 仍然是' in out)
+    # ── BA：退图时别再全量消歧（2026-10-26 用户报「为什么结束了还要读图名字」）────
+    #   用户原话：「为什么结束了还要读图名字？」
+    #   真机铁证（gui_console_20261026.log 22:41 那把）：
+    #     22:41:47 本图结束：done → 22:41:56 图名「（图名未读到）」有歧义 [15 个代码]
+    #     → 22:42:00 已回到选图界面 ｜ 退图 13.0s
+    #   根因：finish_map 里 `board_hidden(_cells_cached(..., mapname=''))`
+    #        ⇒ board_state('') ⇒ **15 个 code 各建一次盘**（≈4 秒）+ 打那句 ✗
+    #   ⚠⚠ 这是「轮首跳过全量消歧」修复的**副作用**（首轮不再顺手填 _CODE_DECIDED['']）
+    #   修：把当前图的图名（st['mapname']，真机每图都有 ✓）传进 finish_map
+    #      ⇒ `_CODE_DECIDED[图名]` 早被图内分类填好 ⇒ **零消歧、零日志** ✓
+    #   ⚠ 本组**纯离线**（只读源码 + 读 loop_log，不碰设备）⇒ 可并发 ✓
+    print()
+    print('【BA】退图时别再全量消歧（2026-10-26 用户报：结束了还要读图名字）')
+    vfm = os.path.join(_subdir_of('verify_finish_mapname.py'), 'verify_finish_mapname.py')
+    if not os.path.exists(vfm):
+        skip('verify_finish_mapname.py', '文件不存在')
+    else:
+        rc, out = run(['verify_finish_mapname.py'], timeout=300)
+        check('退图图名回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐ finish_map 有 mapname 参数', 'finish_map 有 mapname 参数' in out)
+        check('㛲 ⭐ 调用处把当前图名传进去', '调用处把当前图名传进去' in out)
+        check('㛳 ⛔ AST 守门：没有 mapname=空串 字面量调用',
+              '字面量调用' in out)
+        check('㛴 ⭐ 执行级：真机 loop_log 里图名**每张图都有**',
+              '每张图都有' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)

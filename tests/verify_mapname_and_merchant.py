@@ -100,9 +100,16 @@ def main():
                     and _v.values[-1].value == ''):
                 continue
             _seg = ast.get_source_segment(src, _v) or ""
+            # ⚠⚠ 判据必须**精确**：只抓「`st.get('mapname')` or 空串」这一种，
+            #   **不能**抓所有「or 空串」——
+            #   否则会误伤 `mapname=(mapname or '')`（**语义不同**！
+            #   那是「用**传进来的**图名，取不到就空」⇒ 2026-10-26 退图修复用的就是它）
+            #   ⇒ 我第一版把判据写太宽 ⇒ AY 组把 BA 组的正确写法判成红 ✗（本轮真踩）
+            if 'st.get(' not in _seg:
+                continue
             if 'map_name(' not in _seg:
                 _old_hits.append(getattr(_n, "lineno", -1))
-    ck('旧写法 mapname=st.get(mapname) or 空串 已不存在（AST 判定）',
+    ck('旧写法 mapname=st.get(mapname) or 空串 已不存在（AST 判定，**只抓 st.get 式**）',
        not _old_hits, "行号 %s" % _old_hits[:3])
     # ⚠⚠ **牙齿实测**：光靠上面那条抓不到「变量赋值式」的回归
     #   （`_mn_have = st.get('mapname') or ''` 不是 keyword 参数 ⇒ AST 那条漏掉 ✗）
