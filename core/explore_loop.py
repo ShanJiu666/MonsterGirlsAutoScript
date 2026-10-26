@@ -1786,6 +1786,21 @@ def board_for(mapname=None, code=None):
 
 _CODE_DECIDED = {}          # mapname -> 已实测消歧后的 code（按图名缓存，避免每轮重算 ✓）
 
+# ⭐⭐⭐⭐⭐ 2026-10-26 **当前图的图名**（模块级，供 `run_maps` 里的退图用）
+#   ---- 为什么需要它（我自己踩的坑，血证）----
+#     我第一版直接在退图处写 `finish_map(b, log, mapname=st.get('mapname'))`
+#     ⇒ **NameError: name 'st' is not defined** ✗✗
+#     根因：`st` 是 `run_one_map()` 的**局部变量**（`:8475` 建、`:8547` 就随函数结束而没了），
+#           而退图那个调用点在 **`run_maps()`**（`:13581`）⇒ 那里**根本没有 `st`** ✗
+#     ⇒ 真机表现：退图这一步抛异常 ⇒ 「退图没成功，已停止」⇒ **整局停在那** ✗✗
+#     ⚠ 这正是本仓**记过两次**的老坑（`bought_rec_err: NameError: name 'st' is not defined`）
+#       —— 我又踩了一次 ⇒ 教训：**跨函数取状态，必须走模块级变量**（同 `_CODE_DECIDED`）✓
+#   ---- 口径 ----
+#     · 写入点：`one_round` 里**锁定图名**的那一处（`st['mapname'] = _mn_now`）
+#     · 读取点：`run_maps` 退图时传给 `finish_map`
+#     · 每张图进图时必写（进图首帧必 OCR ⇒ 必锁 ⇒ 必写）✓
+_LAST_MAPNAME = {}          # {'name': '夏日海滩'} —— 当前图的图名
+
 
 def _candidate_codes(mapname):
     """图名 → **所有可能的** code（>1 个就是有歧义，需要实测消歧 ✓）
@@ -9906,6 +9921,9 @@ def one_round(b, log, rnd, prefix, st):
             _mn_now = map_name(items)
             if _mn_now:
                 st['mapname'] = _mn_now
+                # ⭐ 2026-10-26 **同时记到模块级**（供 `run_maps` 退图时用 ——
+                #   `st` 在那里**不可见** ⇒ 上一版就是栽在这 ⇒ NameError ✗）
+                _LAST_MAPNAME['name'] = _mn_now
                 log.append({'mapname': _mn_now, 'round': rnd, 'note': '进图首帧锁定图名 ✓'})
         else:
             _mn_again = map_name(items)
@@ -13578,7 +13596,13 @@ def run_maps(a):
             #   ⇒ 退图时那次 `board_hidden` 分类**用真 code** ⇒
             #     **不做「15 个 code 全量消歧」** ⇒ 不再打印「（图名未读到）」+ 省 ≈4 秒 ✓
             #   （真机 22:41 那把的日志铁证，详见 `finish_map` docstring）
-            ok = finish_map(b, log, mapname=st.get('mapname'))
+            #   ⛔⛔⛔ **必须用模块级 `_LAST_MAPNAME`，不能用 `st`** ——
+            #     `st` 是 `run_one_map()` 的**局部变量**，**这里（`run_maps`）根本看不到它**
+            #     ⇒ 我第一版写 `st.get('mapname')` ⇒ **NameError** ⇒
+            #        「退图这一步抛异常」⇒「退图没成功，已停止」⇒ **整局停在那** ✗✗
+            #        （真机实测：用户报「退图这一步抛异常 NameError」）
+            #        ⇒ 已改用模块级变量（同 `_CODE_DECIDED` 的既有模式 ✓）
+            ok = finish_map(b, log, mapname=_LAST_MAPNAME.get('name'))
         except Exception as _e8:      # noqa: BLE001
             ok = False
             log.append({'map': mi, 'finish_raised': repr(_e8)[:200]})

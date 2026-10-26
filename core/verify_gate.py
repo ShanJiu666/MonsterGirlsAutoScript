@@ -2335,11 +2335,16 @@ def main():
         rc, out = run(['verify_finish_mapname.py'], timeout=300)
         check('退图图名回归全过（exit=%d）' % rc, rc == 0,
               out.strip().split('\n')[-1][:90] if out else '')
+        # ⚠⚠ 这几条查的是**子脚本的输出文本** —— 措辞必须与子脚本实际印的**一致**
+        #   （本轮真踩：子脚本重写后措辞变了 ⇒ 这条假红 ⇒ 差集多出 1 项 ✓）
         check('㛱 ⭐ finish_map 有 mapname 参数', 'finish_map 有 mapname 参数' in out)
-        check('㛲 ⭐ 调用处把当前图名传进去', '调用处把当前图名传进去' in out)
-        check('㛳 ⛔ AST 守门：没有 mapname=空串 字面量调用',
+        check('㛲 ⛔⛔ AST 守门 B：run_maps 里**零**个 st 引用（NameError 根除 ✓）',
+              'st 引用' in out)
+        check('㛳 ⛔ AST 守门 A：没有 mapname=空串 字面量调用',
               '字面量调用' in out)
-        check('㛴 ⭐ 执行级：真机 loop_log 里图名**每张图都有**',
+        check('㛴 ⭐ 执行级：模块级 `_LAST_MAPNAME` 可用（真跑不抛异常）',
+              '_LAST_MAPNAME' in out)
+        check('㛵 ⭐ 执行级：真机 loop_log 里图名**每张图都有**',
               '每张图都有' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
