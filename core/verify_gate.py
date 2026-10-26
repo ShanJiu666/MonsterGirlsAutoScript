@@ -2346,6 +2346,31 @@ def main():
               '_LAST_MAPNAME' in out)
         check('㛵 ⭐ 执行级：真机 loop_log 里图名**每张图都有**',
               '每张图都有' in out)
+    # ── BB：单格通道置信度闸门（2026-10-26 用户报「战斗地块认成旅行商人」）────
+    #   用户原话：「把战斗地块认成旅行商人，限时礼包了。。」帧 runs/r_234847_0.png
+    #   逐格 top5 铁证：4,1 旅行商人 0.164 gap=0.037 / 5,2 限时礼包 0.441 gap=0.049
+    #                  5,3 海边小屋 0.330 gap=0.051 => top5 全是低分互咬
+    #   判据：gap(top1 与第一个不同 sid 的分差) < 0.06 且 score < 0.45，
+    #         **只对单格通道**（anchor is None）=> 真夏日海滩帧命中 0.24%（5/2100）
+    #   ⚠ 不限通道时命中 1.8%，19 个里 9 个「巨大沙堡」+5 个「海边游客」，
+    #     全是同分数连片格（真大块地块，走块通道）=> 必须豁免
+    #   ⚠ 本组纯离线（真机帧 + 源码结构判定）=> 可并发
+    print()
+    print('【BB】单格通道置信度闸门（2026-10-26 用户报：战斗地块认成商人/礼包）')
+    vsg = os.path.join(_subdir_of('verify_single_cell_gap.py'), 'verify_single_cell_gap.py')
+    if not os.path.exists(vsg):
+        skip('verify_single_cell_gap.py', '文件不存在')
+    else:
+        rc, out = run(['verify_single_cell_gap.py'], timeout=300)
+        check('单格置信度回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐ 判据同时用 gap 与 score', '同时用 gap 与 score' in out)
+        check('㛲 ⛔ 必须限定单格通道（否则误伤真大块地块）',
+              '必须限定单格通道' in out)
+        check('㛳 ⭐⭐ 执行级：那三格**全部认不出**', '认不出' in out)
+        check('㛴 ⚠⚠ 对照项：真地块**零误清**', '零误清' in out)
+        check('㛵 ⛔ AST 守门：不改 ratio/revealed',
+              '没有在名字闸门里改' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
