@@ -140,6 +140,20 @@ def main():
             ck("日志落 destiny_confirm",
                any(e.get("popup") == "destiny_confirm" for e in _log if isinstance(e, dict)))
 
+
+    print()
+    print("【2b】⚠⚠ 同源先例守门：本仓**已经踩过同一个弹窗**（坐标逐字相同）")
+    # `buypanels.py:2780~2796`（2026-10-19）：「和平已有紫色同名预言，重复选择会将其覆盖」
+    #   => `[取消(204,742)] [确定(516,742)]` **与本弹窗坐标逐字相同**
+    #   当时的结论：绝不点「取消」—— 那等于这一次选择白做
+    #   ⚠ 但那次只修了 foretell_flow；「选完 SS 下一张图进图」这条路径没人管
+    _bp = open(os.path.join(CORE, "buypanels.py"), encoding="utf-8").read()
+    ck("buypanels 里留档了这个弹窗的坐标（516,742）", "516,742" in _bp)
+    ck("⛔ 那边明确写了「绝不点取消」", "绝不点「取消」" in _bp or "绝不点" in _bp)
+    ck("⛔ 本次分支也点「确定」不点「取消」", "exb(items, L['ok'])" in src)
+    ck("⚠ 注释里记下了用户澄清的触发条件（上一张图选到 SS）",
+       "SS" in src and ("上一张图" in src or "1-1" in src))
+
     print()
     print("【3】⚠⚠ 对照项：普通地图帧**不许**被这个分支接住")
     _mf = os.path.join(ROOT, "dist", "MGAS-v1.0-portable", "runs", "r_195513_0.png")
