@@ -6077,6 +6077,44 @@ def popups(b, items, log, ctx=None):
     if fb(items, *L['kick']):
         log.append({'popup': 'kicked'})
         return 'kicked'
+    # ===== DESTINY PROPHECY DIALOG (2026-10-27) =====
+    # 用户报：「进图会弹出一个弹窗」—— 我现场截图确认（720x1280）：
+    #   标题  提示                 (360,505)
+    #   正文  当前关卡将会触发命运预言  (361,612)
+    #   按钮  取消 (204,742)  |  确定 (516,742)
+    #   背后是选图界面（清凉沙滩 / 夏日海滩入侵 / 底部 快速扫荡+进入地图）
+    #
+    # 病（会让整局卡死，真机可复现）：
+    #   1) popups() 对它返回 'none'（实测 act='none'、taps=[]、log 空）
+    #      => 没有任何代码会关掉它 => 弹窗一直挂着
+    #      为什么接不住：末尾那条通用「确定」分支要求
+    #        ok['cy'] > sy(900)  且  exb(items, L['cancel']) is None
+    #      => 本弹窗「确定」在 cy=742 < 900，而且有「取消」=> 双杀
+    #   2) enter_map 却照样点「进入地图」(603,1079)：
+    #      on_menu=True（底部菜单字还在）、ent 也读得到
+    #      => 点了被弹窗吞掉 => 9 轮 in_map 仍 False => enter: timeout
+    #      => 整局「进图失败（体力不足 / 不在选图界面）」收工（体力明明够）
+    #   3) 本仓 grep 命运预言 一条都没有 => 确实是游戏版本升级新加的前置弹窗
+    #
+    # 修法（点「确定」）：用户要的是进图，这弹窗是告知，确定=继续
+    #   不能点「取消」—— 那是放弃进图
+    #   判据用正文独有词 命运预言（比只看「确定」精确得多）
+    #   放在最前面（kick 之后）：它是进图前置，被别的分支抢走就没法进图
+    if any('命运预言' in (i.get('text') or '') for i in items):
+        _ok_i = exb(items, L['ok'])
+        if _ok_i:
+            _tap(b, _ok_i['cx'], _ok_i['cy'], wait=2.0)
+            log.append({'popup': 'destiny_confirm', 'at': (_ok_i['cx'], _ok_i['cy']),
+                        'texts': [i['text'] for i in items
+                                  if '命运预言' in (i.get('text') or '')][:2]})
+            # 2026-10-27 用户说明：这个弹窗只在他身上挂着 SS 级预言时才出现
+            #   （数据表 Foretell：SS 档 7 种，Duration 一律 1-1 = 只生效 1 张图
+            #     => 每次拿到 SS，下一张图进图前必然弹一次 => 感觉像突然冒出来）
+            #   旧代码对这条路径完全静默 => 用户只能看到 enter: timeout
+            say('       - 「命运预言」前置弹窗 => 点「确定」继续进图')
+            return 'handled'
+        log.append({'popup': 'destiny_no_ok_btn',
+                    'texts': [i['text'] for i in items][:10]})
     # ⭐⭐⭐⭐ 2026-10-15 **预言石板提前认出来**（用户报「预言石碑没有正常领取」）
     #   ---- 病（真机铁证 `runs/acc3/loop/loop_log.json`，map 14）----
     #     [799] `solver.order = ["1,4","3,3","1,6","3,6"]`  ← `3,6` 是预言石碑

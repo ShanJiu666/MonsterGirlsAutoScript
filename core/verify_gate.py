@@ -2396,6 +2396,32 @@ def main():
         check('㛳 ⭐⭐ 执行级：真机样本必须命中', '必须命中' in out)
         check('㛴 ⚠ 对照项：非图名文字 / 位置不对都不命中',
               '不命中' in out)
+    # ── BD：「命运预言」进图前置弹窗（2026-10-27 用户报「进图会弹出一个弹窗」）──
+    #   真机截图（现场截的 720x1280）：标题 提示 / 正文 当前关卡将会触发命运预言
+    #   按钮 取消(204,742) | 确定(516,742)；背后是选图界面
+    #   病：popups() 对它返回 none（实测 act=none、taps=[]、log 空）
+    #       => 没有代码会关掉它；而 enter_map 照样点「进入地图」(603,1079)
+    #       => 点了被弹窗吞掉 => 9 轮 in_map 仍 False => enter: timeout
+    #       => 整局「进图失败」收工（体力明明够）
+    #       为什么接不住：末尾通用「确定」分支要求 ok cy>sy(900) 且无「取消」
+    #       => 本弹窗确定在 cy=742、且有取消 => 双杀
+    #   修：popups() 最前面加专属分支，正文含「命运预言」=> 点「确定」
+    #   夹具：tests/_verify/destiny_dialog_20261027.png（真机截图入库）
+    print()
+    print('【BD】「命运预言」进图前置弹窗（2026-10-27 用户报）')
+    vdd = os.path.join(_subdir_of('verify_destiny_dialog.py'), 'verify_destiny_dialog.py')
+    if not os.path.exists(vdd):
+        skip('verify_destiny_dialog.py', '文件不存在')
+    else:
+        rc, out = run(['verify_destiny_dialog.py'], timeout=300)
+        check('命运预言弹窗回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐ 弹窗帧 => act == handled（修前是 none）',
+              'act == handled' in out)
+        check('㛲 ⭐⭐ 点的是「确定」(516,742) ±3px', '确定' in out)
+        check('㛳 ⛔ 日志落 destiny_confirm', 'destiny_confirm' in out)
+        check('㛴 ⚠⚠ 对照项：普通地图帧不被本分支接住',
+              '不许被本分支接住' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
