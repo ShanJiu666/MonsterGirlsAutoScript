@@ -1890,7 +1890,7 @@ def _disambiguate_map(img, mapname, cands, log=None):
     return best
 
 
-def board_state(img, mapname=None, code=None):
+def board_state(img, mapname=None, code=None, need_names=True):
     """整盘状态 -> {(r,c): {...}}；失败返回 {}（调用方退回旧的启发式）"""
     # ⭐⭐ 2026-10-01：图名有歧义时**用真实帧实测消歧**（按图名缓存 ✓）
     # ⭐⭐⭐ 2026-10-19 **图名读不到也要消歧**（不能兜底成某张固定的图）
@@ -1909,7 +1909,33 @@ def board_state(img, mapname=None, code=None):
                     _cands = sorted(set(spots_mod.map_table().values()))
                 except Exception:           # noqa: BLE001
                     _cands = []
-            if len(_cands) > 1:
+            # 2026-10-27 只判亮度/格子数（board_hidden / looks_in）时**不需要地块名**
+            #   => 跳过「15 个 code 全量消歧」（省 4~10 秒 + 不打那句误导日志）
+            #
+            #   ⛔ 但**不能随便挑 `_cands[0]`** —— 实测（r_195513_0.png，清空缓存）：
+            #        S00001 => light=23 gray=12
+            #        S00003 => light=5  gray=23   <- 才是真的
+            #      ⇒ 用错 code 时 ratio 分母变了 ⇒ **light/gray 数字会反过来** ✗✗
+            #        （那样 board_hidden / looks_in 会给出相反的答案 —— 比慢更糟）
+            #
+            #   ⇒ 正确做法：**优先复用当前图已锁定的真 code**
+            #     `_LAST_MAPNAME` 是 `one_round` 锁图名时写的（每张图都有 ✓）
+            #     ⇒ 拿它的图名去 `_CODE_DECIDED` 查 ⇒ 命中就是**真 code** ✓
+            #     只有真拿不到（比如还没进过图）才退回 `_cands[0]`（并记一条日志）
+            if not need_names:
+                _known_mn = _LAST_MAPNAME.get("name")
+                code = (_CODE_DECIDED.get(_known_mn) if _known_mn else None)
+                if code is None:
+                    code = _cands[0] if _cands else None
+                    if code is not None:
+                        try:
+                            print("[warn] need_names=False 但拿不到当前图的真 code "
+                                  "=> 退回 %s（light/gray 可能与真实相反）" % code)
+                        except Exception:       # noqa: BLE001
+                            pass
+                if code is None:
+                    return {}
+            elif len(_cands) > 1:
                 code = _disambiguate_map(img, mapname or '（图名未读到）',
                                          _cands, log=None)
             elif _cands:
@@ -3628,7 +3654,7 @@ def cell_center(r, c):
             int(GRID['y0'] + (r - 1) * GRID['cy'] + GRID['cy'] / 2))
 
 
-def cells_of(img, mapname=None, code=None):
+def cells_of(img, mapname=None, code=None, need_names=True):
     """棋盘逐格状态（2026-09-25 起用地块分类器，不再靠中心色采样）
 
     -> {'gray': 未揭示格中心, 'light': 已揭示格中心,
@@ -3637,7 +3663,7 @@ def cells_of(img, mapname=None, code=None):
     """
     out = {'gray': [], 'light': [], 'plain': [], 'content': [], 'buy': [],
            'buy_hidden': [], 'unknown': []}
-    st = board_state(img, mapname, code)
+    st = board_state(img, mapname, code, need_names=need_names)
     out['st'] = st
     if not st:
         # 兜底：老的颜色启发式（分类器不可用时至少还能跑）
@@ -4380,7 +4406,11 @@ def panel_gone(b, probe, tag='unstick', dlg_btn=None):
     """
     try:
         _im0 = b.img()
-        if _im0 is not None and not board_hidden(cells_of(_im0)):
+        # 2026-10-27 need_names=False：这里只看「棋盘压没压暗」
+        #   （board_hidden 只读 gray/light/st.ratio）=> 不需要地块名
+        #   => 跳过 15 个 code 全量消歧（省时间 + 不打那句误导日志）
+        if _im0 is not None and not board_hidden(
+                cells_of(_im0, need_names=False)):
             return True
     except Exception:                       # noqa: BLE001
         pass
@@ -7602,7 +7632,9 @@ def enter_map(b, log, timeout=40):
                 _looks_in = True                       # 默认"要 OCR"（fail-safe）
                 if _w % 3 != 0:
                     try:
-                        _c2 = cells_of(img2)
+                        # 2026-10-27 need_names=False：这里只判「有没有亮格」
+                        #   => 不需要地块名 => 跳过全量消歧（省时间 + 不打那句）
+                        _c2 = cells_of(img2, need_names=False)
                         try:
                             _mx2 = max([float((v or {}).get('ratio') or 0)
                                         for v in (_c2.get('st') or {}).values()] or [0.0])

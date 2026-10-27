@@ -2422,6 +2422,33 @@ def main():
         check('㛳 ⛔ 日志落 destiny_confirm', 'destiny_confirm' in out)
         check('㛴 ⚠⚠ 对照项：普通地图帧不被本分支接住',
               '不许被本分支接住' in out)
+    # ── BE：只判亮度时别做「15 个 code 全量消歧」（2026-10-27 用户贴的日志）──
+    #   用户贴：图名「（图名未读到）」有歧义 [...15 个...] => 实测选 S00003
+    #   根因（AST 扫出两个调用点）：
+    #     :4413 board_hidden(cells_of(_im0))   <- 没传 mapname
+    #     :7637 _c2 = cells_of(img2)          <- 没传 mapname
+    #     两处都只判亮度/格子数（board_hidden 只读 gray/light/st.ratio）
+    #     => 不需要地块名，却触发全量消歧 => 打那句 + 白花 4~10 秒
+    #   ⛔ 第一版改错：让 need_names=False 取 _cands[0] => 实测
+    #      S00001 => light=23 gray=12 / S00003 => light=5 gray=23（真的）
+    #      => 用错 code 时 light/gray 会**反过来** => board_hidden 给相反答案 ✗
+    #   正解：need_names=False 时**优先复用 _LAST_MAPNAME 锁定的真 code**
+    #   实测：0.56 秒 vs 老路径 7.22 秒，light/gray/board_hidden 逐项一致 ✓
+    print()
+    print('【BE】只判亮度时别做全量消歧（2026-10-27 用户贴的日志）')
+    vnn = os.path.join(_subdir_of('verify_need_names.py'), 'verify_need_names.py')
+    if not os.path.exists(vnn):
+        skip('verify_need_names.py', '文件不存在')
+    else:
+        rc, out = run(['verify_need_names.py'], timeout=300)
+        check('need_names 回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐ 只判亮度的调用点全部传 need_names=False',
+              '全部' in out and 'need_names=False' in out)
+        check('㛲 ⛔ 优先复用锁定的真 code（不许简单取 _cands[0]）',
+              '_LAST_MAPNAME' in out)
+        check('㛳 ⭐⭐ 执行级：结果与真 code 逐项一致', '一致' in out)
+        check('㛴 ⭐ 而且明显更快（< 3 秒）', '更快' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
