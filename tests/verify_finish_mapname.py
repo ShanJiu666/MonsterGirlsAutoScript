@@ -125,13 +125,30 @@ def main():
     print()
     print('【5】⭐ 执行级：图名在真机语料里**每张图都有**（不然传了也是空）')
     _mn = []
+    _empty = None
     try:
         import json
-        _p = os.path.join(ROOT, 'dist', 'MGAS-v1.0-portable', 'runs', 'loop', 'loop_log.json')
-        if os.path.exists(_p):
-            _d = json.load(open(_p, encoding='utf-8'))
-            _mn = [e.get('mapname') for e in _d
-                   if isinstance(e, dict) and e.get('mapname')]
+        import glob as _glob
+        # ⚠⚠ **不能只读根目录那一份** —— 多实例运行时根目录可能被轮转清空
+        #   （真机实测：acc3 在跑，根目录 `runs/loop/loop_log.json` 是 `[]`
+        #    ⇒ 本项假红 ✗）。改成**扫所有实例**，取第一个有图名记录的 ✓
+        _base = os.path.join(ROOT, 'dist', 'MGAS-v1.0-portable', 'runs')
+        _cands = ([os.path.join(_base, 'loop', 'loop_log.json')]
+                  + sorted(_glob.glob(os.path.join(_base, '*', 'loop', 'loop_log.json'))))
+        for _p in _cands:
+            if not os.path.exists(_p):
+                continue
+            try:
+                _d = json.load(open(_p, encoding='utf-8'))
+            except Exception:       # noqa: BLE001
+                continue
+            _got = [e.get('mapname') for e in _d
+                    if isinstance(e, dict) and e.get('mapname')]
+            if _got:
+                _mn = _got
+                break
+            if _empty is None:
+                _empty = _p
     except Exception:       # noqa: BLE001
         pass
     ck('loop_log 里有图名记录（真机证据 ✓）', bool(_mn), repr(_mn[:3]))

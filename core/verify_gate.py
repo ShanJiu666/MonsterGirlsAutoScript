@@ -2371,6 +2371,31 @@ def main():
         check('㛴 ⚠⚠ 对照项：真地块**零误清**', '零误清' in out)
         check('㛵 ⛔ AST 守门：不改 ratio/revealed',
               '没有在名字闸门里改' in out)
+    # ── BC：in_map 的图名判据窗口（曾经永远不命中）2026-10-27 ────────────
+    #   病：窗口写的 sy(150)~sy(215)，而真机图名实测 cy≈122
+    #       （runs/r_195513_0.png → cx=360.0 cy=122.2 "夏日海滩[100]"）
+    #       => 122 < 150 => **这条判据从诞生起就没生效过** ✗
+    #   后果：图内识别只剩「结束冒险」一条，而那是结算/浮层才有的按钮
+    #         => 进图首帧没有它 => in_map 判否 => enter_map 白等 9 轮
+    #         => 真机 acc3 12:43 那把点了 2 次 (603,1079) 还是 timeout
+    #            => 整局以「进图失败」收工（体力 1997 明明够）✗✗
+    #   修：窗口 100~215（实测 122 落在中间），判据正则一个字不改
+    #   ⚠ 门禁必须**从源码 AST 读窗口**（第一版硬编码 => 假绿，被牙齿抓出）
+    print()
+    print('【BC】in_map 图名判据窗口（2026-10-27：曾经永远不命中）')
+    vim = os.path.join(_subdir_of('verify_inmap_mapname.py'), 'verify_inmap_mapname.py')
+    if not os.path.exists(vim):
+        skip('verify_inmap_mapname.py', '文件不存在')
+    else:
+        rc, out = run(['verify_inmap_mapname.py'], timeout=300)
+        check('in_map 图名判据回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐ 窗口从源码 AST 读出（不硬编码，防假绿）',
+              'AST' in out and '窗口' in out)
+        check('㛲 ⛔ 窗口下界能装下实测 cy=122', '装下实测 cy=122' in out)
+        check('㛳 ⭐⭐ 执行级：真机样本必须命中', '必须命中' in out)
+        check('㛴 ⚠ 对照项：非图名文字 / 位置不对都不命中',
+              '不命中' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)
