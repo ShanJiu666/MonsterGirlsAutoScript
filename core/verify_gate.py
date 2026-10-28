@@ -2184,7 +2184,10 @@ def main():
         check('㛝 ⚠⚠ **对照项**：低分 + gap 0.05 的误报 ⇒ strong=False（不是恒真 ✓）',
               'strong=False' in out)
         check('㛞 ⛔ `merchant_done` **既有写也有读**（不再是死集合 ✓）',
-              'n=1' in out)
+              # 2026-10-28: 写入点由 1 处变 2 处（新增「买完立刻 done.add」也记账本）
+              #   => 断言不能写死 n=1（那等于把实现细节钉死，一改就假红）
+              ('n=1' in out or 'n=2' in out or 'n=3' in out)
+              and 'n=0' not in out)
         check('㛟 ⛔ 撤回守门：`vault_px_now` 里没有裸的 score 门槛 ✓',
               '预期 0 项' not in out and rc == 0)
 
@@ -2449,6 +2452,35 @@ def main():
               '_LAST_MAPNAME' in out)
         check('㛳 ⭐⭐ 执行级：结果与真 code 逐项一致', '一致' in out)
         check('㛴 ⭐ 而且明显更快（< 3 秒）', '更快' in out)
+    # ── BF：旅行商人买完后还是会点开（2026-10-28 用户第 3~4 次反馈）──
+    #   用户原话：「怎么旅行商人买完后还是会点开？我记得这个问题我反馈了三四次了」
+    #   真机铁证（runs/loop/loop_log.json #505 -> #512~513）：
+    #     #505 {"bought_rec":[360,1004],"cell":"4,4"}             <- 买完 (4,4)
+    #     #512 {"collect":"fixed_close","at":[360,1004]}          <- 又点同一格
+    #     #513 {"collect":"tapped","at":[360,1004],"opened":true} <- 面板被重新打开
+    #   根因：买完的"已买"只记账本，而**三条点击路径都不看账本**：
+    #     ① 点序 cands 被 buy_px（含 buy_seen/buy_sticky 跨轮记忆）永不拉黑
+    #     ② 点击循环 panel_seen 那条有 done.add，没认出面板时没有
+    #     ③ final_collect 取 clicks[-1] 补点 —— 商人买完那下正是最后一次点击
+    #        => **补点又点它一次** <- 本次真机中的就是这条
+    #   修法：① 买完立刻 done.add + 摘 buy_seen/buy_sticky
+    #         ② final_collect 补点前查账本，已买 => 跳过（记 bought_skip，不静默）
+    print()
+    print('【BF】旅行商人买完后还是会点开（2026-10-28 第 3~4 次反馈）')
+    vmt = os.path.join(_subdir_of('verify_merchant_no_retap.py'), 'verify_merchant_no_retap.py')
+    if not os.path.exists(vmt):
+        skip('verify_merchant_no_retap.py', '文件不存在')
+    else:
+        rc, out = run(['verify_merchant_no_retap.py'], timeout=300)
+        check('商人重复点回归全过（exit=%d）' % rc, rc == 0,
+              out.strip().split('\n')[-1][:90] if out else '')
+        check('㛱 ⭐ final_collect 补点前查已买账本', 'bought_skip' in out)
+        check('㛲 ⭐⭐ 执行级：账本里有 => 补点被跳过且一次没点',
+              '一次都没点' in out)
+        check('㛳 ⭐ 买完立刻 done.add + 摘永不拉黑记忆',
+              'buy_seen' in out and 'buy_sticky' in out)
+        check('㛴 ⚠⚠ 对照项：账本为空时行为不变（不是一刀切）',
+              '不该记 bought_skip' in out)
     # ── 汇总 ──────────────────────────────────────────────────────────
     print()
     print('=' * 74)

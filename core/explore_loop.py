@@ -8293,6 +8293,40 @@ def final_collect(b, log, st):
     #     而真正吃掉这一格的是 `final_collect()` 这条完全独立的路径** ✗
     #   ⚠ 另一条同样致命的：**紫格是"目标"，本来就该在退图前被打掉/派出**，
     #     而不是被"补点"当成"随手再点一下"—— 补点第二次点它只会把面板再弹一次 ✓
+    # ===== 2026-10-28 补点必须跳过「已经买完的商人/宝库」=====
+    # 用户第 3~4 次反馈（原话）：「怎么旅行商人买完后还是会点开？我记得这个问题我反馈了三四次了」
+    #
+    # 真机铁证（runs/loop/loop_log.json，#505 -> #512~513）：
+    #   #505 {"bought_rec":[360,1004],"cell":"4,4"}          <- 17:24 买完 (4,4)
+    #   #512 {"collect":"fixed_close","at":[360,1004]}       <- **又点同一格**
+    #   #513 {"collect":"tapped","at":[360,1004],"opened":true}  <- 面板被重新打开 ✗
+    #
+    # 根因：`pos = clicks[-1]` 取的是**最后一次点击的格**，
+    #   而商人买完那一下正是最后一次点击 => 补点又点它一次。
+    #   本函数**完全不看** bought_done / merchant_done（那是"已买"的账本）。
+    #   ⚠ 与紫格那条是**同一个形状**：clicks[-1] 恰好是"不该补点"的格。
+    #
+    # 修法：补点前先查账本 —— 那格已买过 => 跳过（记一条日志，不静默）
+    _fc_bought_rc = set()
+    try:
+        for _s in (st.get('bought_done') or set()):
+            try:
+                _fc_bought_rc.add(tuple(cell_of(int(_s[0]), int(_s[1]))))
+            except Exception:       # noqa: BLE001
+                continue
+        _fc_bought_rc |= set(st.get('merchant_done') or set())
+    except Exception:       # noqa: BLE001
+        _fc_bought_rc = set()
+    try:
+        _fc_rc0 = cell_of(pos[0], pos[1])
+    except Exception:       # noqa: BLE001
+        _fc_rc0 = None
+    if _fc_rc0 is not None and _fc_rc0 in _fc_bought_rc:
+        log.append({'collect': 'bought_skip', 'at': list(pos),
+                    'cell': '%d,%d' % _fc_rc0,
+                    'note': '这格已经买过（账本里有）=> 不再补点（补点会重新打开面板 ✗）'})
+        say('       - 退图前补点：(%d,%d) 已经买过 => 跳过 ✓' % _fc_rc0)
+        return _fc_done(0)
     _fc_sid = ''
     try:
         _fc_rc = cell_of(pos[0], pos[1])
@@ -12253,6 +12287,49 @@ def one_round(b, log, rnd, prefix, st):
             except Exception as _ei:      # noqa: BLE001
                 log.append({'vault': 'inline_check_err', 'e': repr(_ei)[:140]})
             break
+            # ===== 2026-10-28 买完立刻进 done + 摘掉永不拉黑记忆 =====
+            # 用户第 3~4 次反馈（原话）：「怎么旅行商人买完后还是会点开？我记得这个问题我反馈了三四次了」
+            #
+            # 为什么前几次都没根治（这次把整条链读完了）：
+            #   买完那格的"已买"只记进 bought_done / merchant_done，
+            #   但**点序准入判据根本不看这两个集合**，它看的是：
+            #     cands = [x for x in order if x not in done
+            #               and (x in marked_px or x in buy_px or cold.get(x,0) < 2)]
+            #   而 buy_px = set(buy) | set(buy_hidden) | set(sticky)
+            #                | set(st[buy_seen]) | set(_probe_px)    <- 五条来源
+            #   => 商人格**永远在 buy_px 里**（buy_seen/sticky 跨轮记忆一直记着它）
+            #   => cold>=2 => done 那条**被 x not in buy_px 挡住**（永不拉黑口径）
+            #   => 只要某轮 panel_seen() 没认出面板（动画/时机，实测会发生）
+            #      就走 cold+1 分支 => 那格**既不进 done、又一直在点序里**
+            #   => 下一轮重新排进计划 => **再点一次**
+            # 关键：done 只被"认出面板"那条路写；"没认出面板"那条路被 buy_px 保护着
+            #       => 两条路都不覆盖它 => 它成了漏网格
+            #
+            # 修法：买完那一刻就主动收尾
+            #   ① done.add(那格)                    —— 本图不再点它
+            #   ② 从 buy_seen / buy_sticky 里摘掉   —— 它们只该表示"还没买到"
+            # 不动 bought_done / merchant_done（那是"买过"的账本，另有 prune 负责）
+            # 只对真的买成功做；没买成要留着重试
+            try:
+                if act == 'handled' and (cx, cy):
+                    _rc_b = cell_of(cx, cy)
+                    _bought_rc = set()
+                    for _s in (st.get('bought_done') or set()):
+                        try:
+                            _bought_rc.add(tuple(cell_of(int(_s[0]), int(_s[1]))))
+                        except Exception:       # noqa: BLE001
+                            continue
+                    _bought_rc |= set(st.get('merchant_done') or set())
+                    if _rc_b in _bought_rc:
+                        done.add((cx, cy))
+                        st.get('buy_seen', {}).pop((cx, cy), None)
+                        st.get('buy_sticky', {}).pop((cx, cy), None)
+                        log.append({'merchant': 'bought_done_now',
+                                    'cell': '%d,%d' % _rc_b, 'at': (cx, cy),
+                                    'note': '买完立刻进 done + 摘掉永不拉黑记忆 ✓'})
+                        say('       · 商人/宝库 (%d,%d) 已买过 ⇒ 本图不再点它 ✓' % _rc_b)
+            except Exception as _enb:       # noqa: BLE001
+                log.append({'merchant': 'bought_done_now_err', 'e': repr(_enb)[:120]})
         cold[(cx, cy)] = cold.get((cx, cy), 0) + 1
         if cold[(cx, cy)] >= 2 and (cx, cy) not in marked_px \
                 and (cx, cy) not in buy_px:
