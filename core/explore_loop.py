@@ -11619,7 +11619,31 @@ def one_round(b, log, rnd, prefix, st):
                 #      · 连续点雾 ⇒ 也不再重算（重算出来的还是那几格 ✗ 白花时间 ✓）
                 #      （想回到旧行为：把下面条件换回
                 #         `PLAN_ONCE and _plan_left_rc and fog_noop_streak < 2` ✓）
-                if PLAN_ONCE and st.get('had_plan'):
+                # ⛔⛔⛔ 2026-10-29 **连续点雾必须能突破 PLAN_ONCE**（用户报「战斗格打完不能连锁
+                #   挨着的草地」，真机 r_180739_0.png / 18:07:38 第 28 张图）
+                #   ---- 病（5 轮空转 + 用户手动停）----
+                #     [r0] 已揭示 5 / 用 2 步计划 → 3,1 → 2,5
+                #     3,1 开打·拦路格 ⇒ **胜利 ✓ 已揭示 5→10（连锁正常 ✓）**
+                #     2,5 = boss 但 ratio=0.446 ⇒ **雾格、点不动**
+                #     [r3]~[r7] 每轮都是「计划剩 1 步」+ 点 (456,812) 没反应 ⇒ 5 轮 0 进展 ✗
+                #   ---- 根因（读代码即可证）----
+                #     `PLAN_ONCE=True` + 首轮就算出计划 ⇒ `st['had_plan']` 恒真
+                #     ⇒ **永远走「沿用」分支** ⇒ 下面那段
+                #       `if _fstr >= 2 and _plan_left_rc: force_replan_fogged`
+                #     **是死代码，一次都执行不到** ✗✗
+                #     —— 这正是 :12000 那行注释记的「自救闸门没触发」，
+                #        当时只修了 ratio 常量，**没修这个前置条件** ✗
+                #   ---- 为什么必须重算（不是白花时间）----
+                #     重算时求解器拿的是**更新后的观测**（已揭示 5→10 格）
+                #     ⇒ 新计划会绕开雾格、去找真正可达的目标 ✓
+                #     而「沿用」只能对着同一格雾无限点 ✗
+                #   ---- 口径不变 ----
+                #     正常情况下（没连续点雾）仍然**一图只规划一次** ✓
+                #     只有「连续 ≥2 轮点到的都是雾格」这个**明确的坏信号**才重算
+                #     —— 与 `force_unstick` / `fog_noop_streak` 同一个做法（v1.72 教训 ✓）
+                _fstr = int(st.get('fog_noop_streak', 0) or 0)
+                _need_replan = bool(_fstr >= 2 and _plan_left_rc)
+                if PLAN_ONCE and st.get('had_plan') and not _need_replan:
                     # 还有没用完的步 ⇒ **沿用**（不重算）✓；已用完 ⇒ 也沿用（空计划 ✓）
                     st['plan_reused'] = st.get('plan_reused', 0) + 1
                     log.append({'solver': 'plan_reused', 'left': len(_plan_left_rc),
@@ -11631,8 +11655,8 @@ def one_round(b, log, rnd, prefix, st):
                     #   真机 23:30 那把：计划 `["1,2","2,4"]` 两格都是雾 ⇒ 两轮全
                     #   `fogged_noop` ⇒ `plan_reused` 让它**一直沿用** ⇒ 0 进展卡死 ✗
                     #   ⇒ 连续 ≥2 轮点雾就重算一次（配合 A 的观测闸门，新计划不会再排雾格）✓
-                    _fstr = int(st.get('fog_noop_streak', 0) or 0)
-                    if _fstr >= 2 and _plan_left_rc:
+                    #   （`_fstr` / `_need_replan` 已在上面算好，这里不再重复取 ✓）
+                    if _need_replan:
                         log.append({'solver': 'force_replan_fogged', 'streak': _fstr,
                                     'left': len(_plan_left_rc),
                                     'note': '连续点雾格无反应 ⇒ 强制重算计划（不再沿用）'})

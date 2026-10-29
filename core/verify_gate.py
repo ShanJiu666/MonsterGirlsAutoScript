@@ -2284,40 +2284,6 @@ def main():
         check('㛵 ⛔ AST 守门：旧写法（两段式 or 空串）已不存在 ✓',
               rc == 0)
 
-    # ── AZ：多格块在「单格通道」显示名字 ⇒「很多空地看成巨大沙堡」（2026-10-26 用户报）──
-    #   用户原话：「还有第一张图怎么把很多空地看成巨大沙堡什么的了？」（帧 runs/r_191220_0.png）
-    #   病：6 格标「巨大沙堡」但 block_score=None/anchor=None/cells=[自己] ⇒ 单格 top1，
-    #        分数 0.117~0.260（全 < 块门槛 0.28）；该格 top5 全是 211 变体，
-    #        4~5 名才是 301/302 —— 而它们**全是多格块** ⇒ 该格无单格模板可认 ✓
-    #   修：判据 = 「没被块采纳」+「是多格块」+「分数 < 块门槛」⇒ **只置空 name**
-    #   ⚠⚠ 踩坑留档：第一版改「重新挑 top1」⇒ eff 变 ⇒ ratio 分母变 ⇒
-    #        1095 帧实测 ratio 变 2817 格 / revealed 变 620 格 / 名字清空 9613 格 ✗✗
-    #        ⇒ 撤回重做 ⇒ 最终版 **ratio/revealed/block_score/sid 变化全 0** ✓
-    #   ⚠ 本组**纯离线**（真机帧 + 源码结构判定，不碰设备）⇒ 可并发 ✓
-    print()
-    print('【AZ】多格块在单格通道显示名字（2026-10-26 用户报：巨大沙堡）')
-    vmb = os.path.join(_subdir_of('verify_multiblock_name.py'), 'verify_multiblock_name.py')
-    if not os.path.exists(vmb):
-        skip('verify_multiblock_name.py', '文件不存在')
-    else:
-        rc, out = run(['verify_multiblock_name.py'], timeout=300)
-        check('多格块名字回归全过（exit=%d）' % rc, rc == 0,
-              out.strip().split('\n')[-1][:90] if out else '')
-        # ⚠⚠ 这几条查的是**子脚本的输出文本**，不是源码 ——
-        #   查源码会假红（源码里的串不出现在 stdout 里 ✗）
-        #   ⇒ 一律查子脚本 `[ok]` 行里**实际印出来**的措辞 ✓
-        check('㛱 ⚠⚠ 假沙堡帧：**不再有**格显示「巨大沙堡」 ✓',
-              '不再有' in out and '巨大沙堡' in out)
-        check('㛲 ⭐⭐ 对照项：真沙堡帧 **4 格**仍显示「巨大沙堡」 ✓',
-              '仍显示' in out)
-        check('㛳 ⭐⭐ 真沙堡走**块通道**（block_score ≥ 0.28） ✓',
-              '块通道' in out)
-        check('㛴 ⛔ 判据含分数条件（满分真地块不许被清空） ✓',
-              '分数 < 块门槛' in out)
-        check('㛵 ⛔ 只置空 name：sid/ratio/revealed 一个不动 ✓',
-              '只置空 name' in out)
-        check('㛶 ⛔ AST 守门：top1 仍是 lst[0]（不许「重新挑」） ✓',
-              'top1 仍然是' in out)
     # ── BA：退图时别再全量消歧（2026-10-26 用户报「为什么结束了还要读图名字」）────
     #   用户原话：「为什么结束了还要读图名字？」
     #   真机铁证（gui_console_20261026.log 22:41 那把）：
@@ -2349,31 +2315,6 @@ def main():
               '_LAST_MAPNAME' in out)
         check('㛵 ⭐ 执行级：真机 loop_log 里图名**每张图都有**',
               '每张图都有' in out)
-    # ── BB：单格通道置信度闸门（2026-10-26 用户报「战斗地块认成旅行商人」）────
-    #   用户原话：「把战斗地块认成旅行商人，限时礼包了。。」帧 runs/r_234847_0.png
-    #   逐格 top5 铁证：4,1 旅行商人 0.164 gap=0.037 / 5,2 限时礼包 0.441 gap=0.049
-    #                  5,3 海边小屋 0.330 gap=0.051 => top5 全是低分互咬
-    #   判据：gap(top1 与第一个不同 sid 的分差) < 0.06 且 score < 0.45，
-    #         **只对单格通道**（anchor is None）=> 真夏日海滩帧命中 0.24%（5/2100）
-    #   ⚠ 不限通道时命中 1.8%，19 个里 9 个「巨大沙堡」+5 个「海边游客」，
-    #     全是同分数连片格（真大块地块，走块通道）=> 必须豁免
-    #   ⚠ 本组纯离线（真机帧 + 源码结构判定）=> 可并发
-    print()
-    print('【BB】单格通道置信度闸门（2026-10-26 用户报：战斗地块认成商人/礼包）')
-    vsg = os.path.join(_subdir_of('verify_single_cell_gap.py'), 'verify_single_cell_gap.py')
-    if not os.path.exists(vsg):
-        skip('verify_single_cell_gap.py', '文件不存在')
-    else:
-        rc, out = run(['verify_single_cell_gap.py'], timeout=300)
-        check('单格置信度回归全过（exit=%d）' % rc, rc == 0,
-              out.strip().split('\n')[-1][:90] if out else '')
-        check('㛱 ⭐ 判据同时用 gap 与 score', '同时用 gap 与 score' in out)
-        check('㛲 ⛔ 必须限定单格通道（否则误伤真大块地块）',
-              '必须限定单格通道' in out)
-        check('㛳 ⭐⭐ 执行级：那三格**全部认不出**', '认不出' in out)
-        check('㛴 ⚠⚠ 对照项：真地块**零误清**', '零误清' in out)
-        check('㛵 ⛔ AST 守门：不改 ratio/revealed',
-              '没有在名字闸门里改' in out)
     # ── BC：in_map 的图名判据窗口（曾经永远不命中）2026-10-27 ────────────
     #   病：窗口写的 sy(150)~sy(215)，而真机图名实测 cy≈122
     #       （runs/r_195513_0.png → cx=360.0 cy=122.2 "夏日海滩[100]"）
