@@ -150,14 +150,15 @@ class Problem:
         #     都当"已消耗/已揭示源" ⇒ 打掉一个战斗格，它的邻格被判"已揭示"
         #     ⇒ 2,5（雾）被误判可点 ⇒ 排进计划 ⇒ 真机打了两场架、2,5 依然灭着 ✗✗
         #   ---- 修法 ----
-        #     只让 **plain（空地）** 当揭示源 ✓
+        #     2026-10-29 用户定稿：**除旅行商人外都算揭示源**（宝库正常消失会揭示 ✓、
+        #     战斗格日志 5->10 也揭示 ✓）；上面那句「只让 plain」是 10-19 的旧口径，已作废
         #   ⚠ **上面 `board[c] < 0` 那行一个字不动** ——
         #     那是"观测里本来就空的格"（真已消耗，含历史战斗格打掉后留下的空洞）
         #     ⇒ 它必须继续算"已消耗"（否则已走过的地图看不见 ✓）
         for bi in state:
             try:
-                if not self.blocks[bi].plain:
-                    continue            # 战斗格/内容格：不揭示邻格 ✗
+                if getattr(self.blocks[bi], 'is_merchant', False):
+                    continue            # 旅行商人：不揭示邻格（用户 2026-10-29）
             except Exception:           # noqa: BLE001
                 pass                    # 判不了 ⇒ 按老行为（fail-open ✓）
             out.update(self.cells_of.get(bi, ()))
@@ -462,7 +463,7 @@ def _build_cache(prob):
     # 等价代表：同片空地取最小 idx；非空地 = 自己
     REP = {}
     for bi in idxs:
-        if prob.blocks[bi].plain:
+        if getattr(prob.blocks[bi], 'is_merchant', False):
             REP[bi] = min(x for x in (prob.plain_group(bi)))
         else:
             REP[bi] = bi
@@ -534,6 +535,25 @@ def _build_cache(prob):
     #   能不能一开始就不规划这个拉黑的？**」✓
     #   ⇒ 拉黑块（`Block.blocked` ✓）**既不是候选动作、也不借它走路** ✓
     #     （清单里没勾选的宝箱怪/勇者之墓/… ✓；勾选过的商人/宝库不是 blocked ✓）
+    # ⭐⭐⭐⭐⭐ 2026-10-29 用户三次指正后定稿 —— **旅行商人不是揭示源**
+    #   ① 「旅行商人不消失，32不能点的」「甚至连揭开都不会揭开」=> 商人完全不揭示
+    #   ② 「黄金宝库会正常消失」=> 宝库正常揭示，**不排除** ✓
+    #   ③ 真机日志：`(3,1)` 战斗胜利后 已揭示 5 -> 10 => 战斗格**会揭示** ✓
+    #   => 揭示源 = 除「旅行商人」以外的所有块
+    #   ---- 病（真机 acc3 r_214413_0.png）----
+    #     计划 `3,6 -> 3,3(商人) -> 3,2 -> 1,1`，而 `(3,2)` 是雾、点不动 ✗
+    #     实测点完商人后：慢版 `Problem.visible()` = 7 格，
+    #     A* `visible(m)` = 15 格 => 两条路径不一致 => 商人被当成揭示源 ✗✗
+    #   ---- 为什么必须两边都改 ----
+    #     `Problem.consumed_cells()` 早在 2026-10-19 就按用户指正改成
+    #     「只让 plain 当揭示源」（那里逐字记着「打完 1,3 后不能直接点到 2,5」），
+    #     而 A* 这条快版**没跟着改** —— 正是本文件反复警告的
+    #     「只改一处 => A* 走缓存版白改」✗
+    PLAIN_MASK = 0
+    for bi in idxs:
+        if getattr(prob.blocks[bi], 'is_merchant', False):
+            continue          # 旅行商人：永不消失、不揭示（用户 2026-10-29）
+        PLAIN_MASK |= bit[bi]
     blocked_mask = 0
     for bi in idxs:
         if getattr(prob.blocks[bi], 'blocked', False):
@@ -544,7 +564,7 @@ def _build_cache(prob):
             'PLAIN_GROUP_MASK': PLAIN_GROUP_MASK, 'REP': REP,
             'cost': cost, 'camp_mask': camp_mask, 'camp_nb': camp_nb,
             'empty_adj': EMPTY_ADJ, 'obs_lit': OBS_LIT,
-            'targets_mask': targets_mask, 'tcost': tcost,
+            'targets_mask': targets_mask, 'tcost': tcost, 'plain_mask': PLAIN_MASK,
             'idx_of_bit': {v: k for k, v in bit.items()}, 'bit_keyed': True}
 
 
@@ -583,7 +603,8 @@ def solve(prob, max_states=400000, report=None, max_secs=None):
         # ⭐ 起手可见 = 营地四邻 ∪ **观测里已经空掉的格的邻块**（= 已经走出去的地图 ✓）
         #            ∪ **观测里就亮的块**（2026-10-05，见 `OBS_LIT` 注释 ✓）
         out = camp_nb | empty_adj | ch.get('obs_lit', 0)
-        mm = m
+        _pm = ch.get('plain_mask')
+        mm = m if _pm is None else (m & _pm)
         while mm:
             low = mm & -mm
             out |= NB.get(low, 0)
